@@ -40,10 +40,20 @@ type Comment struct {
 	NumberOfLikes int                `bson:"number_of_likes" json:"number_of_likes"`
 }
 
+type NotificationType string
+
+const (
+	PostCreatedNotification    NotificationType = "post_created"
+	CommentCreatedNotification NotificationType = "comment_created"
+	PostLikedNotification      NotificationType = "post_liked"
+)
+
 // Notification represents a notification in the database
 type Notification struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID     primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Type       NotificationType   `bson:"type" json:"type"`
+	ObjectID   primitive.ObjectID `bson:"object_id" json:"object_id"`
 	Content    string             `bson:"content" json:"content"`
 	ReadStatus bool               `bson:"read_status" json:"read_status"`
 	CreatedAt  time.Time          `bson:"created_at" json:"created_at,omitempty"`
