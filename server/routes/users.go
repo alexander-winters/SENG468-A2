@@ -41,10 +41,10 @@ func CreateUser(c *fiber.Ctx) error {
 // GetUser retrieves a user from the database by ID
 func GetUser(c *fiber.Ctx) error {
 	// Get the user ID from the request parameters
-	userID := c.Params("id")
+	username := c.Params("username")
 
 	// Convert the user ID to a MongoDB ObjectID
-	objID, err := primitive.ObjectIDFromHex(userID)
+	objID, err := primitive.ObjectIDFromHex(username)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid user ID",
@@ -68,7 +68,7 @@ func GetUser(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-// UpdateUser updates a user in the database by Username
+// UpdateUser updates a user in the database by username
 func UpdateUser(c *fiber.Ctx) error {
 	// Get the username from the URL params
 	username := c.Params("username")
@@ -97,12 +97,49 @@ func UpdateUser(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-// DeleteUser deletes a user from the database by ID
+// DeleteUser deletes a user from the database by username
 func DeleteUser(c *fiber.Ctx) error {
-	// Your implementation here
+	// Get the username from the URL parameters
+	username := c.Params("username")
+
+	// Delete the user from the database
+	res, err := mongo.Users.DeleteOne(context.Background(), bson.M{"username": username})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not delete user from database",
+		})
+	}
+
+	// Check if a document was deleted
+	if res.DeletedCount == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "User not found",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "User deleted successfully",
+	})
 }
 
 // ListUsers retrieves all users from the database
 func ListUsers(c *fiber.Ctx) error {
-	// Your implementation here
+	// Find all users in the database
+	cursor, err := mongo.Users.Find(context.Background(), bson.M{})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve users from database",
+		})
+	}
+
+	// Decode the cursor into a slice of users
+	var users []models.User
+	if err := cursor.All(context.Background(), &users); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not decode users from cursor",
+		})
+	}
+
+	// Return the users
+	return c.JSON(users)
 }
