@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"SENG468-A2/mongo"
+	"github.com/alexander-winters/SENG468-A2/mongo"
 )
 
 func main() {

@@ -1,8 +1,6 @@
-module SENG468-A2
+module github.com/alexander-winters/SENG468-A2
 
 go 1.20
-
-replace server/mongo => ./mongo
 
 require (
 	github.com/gofiber/fiber/v2 v2.42.0
