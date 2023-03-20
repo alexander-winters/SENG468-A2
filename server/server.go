@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/alexander-winters/SENG468-A2/mongo"
+	"github.com/alexander-winters/SENG468-A2/server/routes"
 )
 
 func main() {
@@ -22,11 +23,11 @@ func main() {
 	})
 
 	// Set up the routes for users
-	app.Post("/api/users", CreateUser)
-	app.Get("/api/users/:id", GetUser)
-	app.Put("/api/users/:id", UpdateUser)
-	app.Delete("/api/users/:id", DeleteUser)
-	app.Get("/api/users", ListUsers)
+	app.Post("/api/users", routes.CreateUser)
+	app.Get("/api/users/:id", routes.GetUser)
+	app.Put("/api/users/:id", routes.UpdateUser)
+	app.Delete("/api/users/:id", routes.DeleteUser)
+	app.Get("/api/users", routes.ListUsers)
 
 	// Set up the routes for posts
 	app.Post("/api/posts", CreatePost)
