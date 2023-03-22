@@ -73,3 +73,10 @@ type CommentReports struct {
 	UserID        primitive.ObjectID `bson:"user_id" json:"user_id"`
 	TotalComments int                `bson:"total_comments" json:"total_comments"`
 }
+
+// LikeReports represents a report on likes given or received by a user
+type LikeReports struct {
+	UserID        primitive.ObjectID `bson:"user_id" json:"user_id"`
+	LikesGiven    int                `bson:"likes_given" json:"likes_given"`
+	LikesReceived int                `bson:"likes_received" json:"likes_received"`
+}

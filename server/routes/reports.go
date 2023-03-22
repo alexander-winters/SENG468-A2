@@ -92,3 +92,53 @@ func GetUserCommentReports(c *fiber.Ctx) error {
 
 	return c.JSON(commentReports)
 }
+
+// GetLikeReports retrieves a report on likes given or received by a user
+func GetLikeReports(c *fiber.Ctx) error {
+	// Get a handle to the likes collection
+	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("likes")
+
+	// Get the user ID from the URL params
+	userID := c.Params("id")
+
+	// Convert the user ID to a MongoDB ObjectID
+	objID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
+	// Create a pipeline to retrieve the total number of likes given and received by the user
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{"user_id": objID}},
+		bson.M{"$group": bson.M{
+			"_id":         "$user_id",
+			"likes_given": bson.M{"$sum": 1},
+			"likes_received": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$eq": bson.A{"$liked_by", objID}},
+				1,
+				0,
+			}}},
+		}},
+	}
+
+	// Execute the pipeline and retrieve the results
+	cursor, err := collection.Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve likes from database",
+		})
+	}
+
+	// Decode the cursor into a slice of LikeReports
+	var reports []models.LikeReports
+	if err := cursor.All(context.Background(), &reports); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not decode likes from cursor",
+		})
+	}
+
+	// Return the reports
+	return c.JSON(reports)
+}
