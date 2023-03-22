@@ -9,11 +9,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 
-	"github.com/alexander-winters/SENG468-A2/mongo/models"
+	"github.com/alexander-winters/SENG468-A2/mymongo"
+	"github.com/alexander-winters/SENG468-A2/mymongo/models"
 )
 
 // Connect to MongoDB
-var client = mongo.GetMongoClient()
+var client = mymongo.GetMongoClient()
 
 // CreateUser inserts a new user into the database
 func CreateUser(c *fiber.Ctx) error {
