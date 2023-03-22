@@ -13,13 +13,10 @@ import (
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
 )
 
-// Connect to MongoDB
-var client = mymongo.GetMongoClient()
-
 // CreateUser inserts a new user into the database
 func CreateUser(c *fiber.Ctx) error {
 	// Get a handle to the users collection
-	collection := client.Database("seng468_a2_db").Collection("users")
+	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 
 	// Parse the request body into a struct
 	var user models.User
@@ -51,7 +48,7 @@ func CreateUser(c *fiber.Ctx) error {
 // GetUser retrieves a user from the database by ID
 func GetUser(c *fiber.Ctx) error {
 	// Get a handle to the users collection
-	collection := client.Database("seng468_a2_db").Collection("users")
+	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 
 	// Get the user ID from the request parameters
 	userID := c.Params("ID")
@@ -84,7 +81,7 @@ func GetUser(c *fiber.Ctx) error {
 // UpdateUser updates a user in the database by ID
 func UpdateUser(c *fiber.Ctx) error {
 	// Get a handle to the users collection
-	collection := client.Database("seng468_a2_db").Collection("users")
+	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 
 	// Get the username from the URL params
 	userID := c.Params("ID")
@@ -101,7 +98,7 @@ func UpdateUser(c *fiber.Ctx) error {
 	user.UpdatedAt = time.Now()
 
 	// Update the user in the database
-	filter := bson.M{"username": userID}
+	filter := bson.M{"ID": userID}
 	update := bson.M{"$set": user}
 	if _, err := collection.UpdateOne(context.Background(), filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -116,7 +113,7 @@ func UpdateUser(c *fiber.Ctx) error {
 // DeleteUser deletes a user from the database by ID
 func DeleteUser(c *fiber.Ctx) error {
 	// Get a handle to the users collection
-	collection := client.Database("seng468_a2_db").Collection("users")
+	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 
 	// Get the username from the URL parameters
 	userID := c.Params("ID")
@@ -144,7 +141,7 @@ func DeleteUser(c *fiber.Ctx) error {
 // ListUsers retrieves all users from the database
 func ListUsers(c *fiber.Ctx) error {
 	// Get a handle to the users collection
-	collection := client.Database("seng468_a2_db").Collection("users")
+	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 
 	// Find all users in the database
 	cursor, err := collection.Find(context.Background(), bson.M{})

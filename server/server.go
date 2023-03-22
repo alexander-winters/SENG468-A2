@@ -6,8 +6,12 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/server/routes"
 )
+
+// Connect to MongoDB
+var client = mymongo.GetMongoClient()
 
 func main() {
 	// Initialize a new Fiber app
@@ -26,11 +30,11 @@ func main() {
 	app.Get("/api/users", routes.ListUsers)
 
 	// Set up the routes for posts
-	app.Post("/api/posts", CreatePost)
-	app.Get("/api/posts/:id", GetPost)
-	app.Put("/api/posts/:id", UpdatePost)
-	app.Delete("/api/posts/:id", DeletePost)
-	app.Get("/api/posts", ListPosts)
+	app.Post("/api/posts", routes.CreatePost)
+	app.Get("/api/posts/:id", routes.GetPost)
+	app.Put("/api/posts/:id", routes.UpdatePost)
+	app.Delete("/api/posts/:id", routes.DeletePost)
+	app.Get("/api/posts", routes.ListPosts)
 
 	// Set up the routes for comments
 	app.Post("/api/comments", CreateComment)
