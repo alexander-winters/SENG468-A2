@@ -38,6 +38,7 @@ type Comment struct {
 	UserID        primitive.ObjectID `bson:"user_id" json:"user_id"`
 	Content       string             `bson:"content" json:"content"`
 	CreatedAt     time.Time          `bson:"created_at" json:"created_at,omitempty"`
+	UpdatedAt     time.Time          `bson:"updated_at" json:"updated_at,omitempty"`
 	NumberOfLikes int                `bson:"number_of_likes" json:"number_of_likes"`
 }
 

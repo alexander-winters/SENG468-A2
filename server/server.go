@@ -37,11 +37,11 @@ func main() {
 	app.Get("/api/posts", routes.ListPosts)
 
 	// Set up the routes for comments
-	app.Post("/api/comments", CreateComment)
-	app.Get("/api/comments/:id", GetComment)
-	app.Put("/api/comments/:id", UpdateComment)
-	app.Delete("/api/comments/:id", DeleteComment)
-	app.Get("/api/comments", ListComments)
+	app.Post("/api/comments", routes.CreateComment)
+	app.Get("/api/comments/:id", routes.GetComment)
+	app.Put("/api/comments/:id", routes.UpdateComment)
+	app.Delete("/api/comments/:id", routes.DeleteComment)
+	app.Get("/api/comments", routes.ListComments)
 
 	// Set up the routes for notifications
 	app.Post("/api/notifications", CreateNotification)

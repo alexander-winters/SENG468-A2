@@ -33,7 +33,7 @@ func CreatePost(c *fiber.Ctx) error {
 	res, err := collection.InsertOne(context.Background(), post)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not insert user into database",
+			"error": "Could not insert post into database",
 		})
 	}
 
@@ -42,7 +42,7 @@ func CreatePost(c *fiber.Ctx) error {
 	return c.JSON(post)
 }
 
-// GetUser retrieves a post from the database by ID
+// GetPost retrieves a post from the database by ID
 func GetPost(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
 	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
@@ -54,7 +54,7 @@ func GetPost(c *fiber.Ctx) error {
 	objID, err := primitive.ObjectIDFromHex(postID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid user ID",
+			"error": "Invalid post ID",
 		})
 	}
 
@@ -64,18 +64,18 @@ func GetPost(c *fiber.Ctx) error {
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
+				"error": "Post not found",
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from database",
+			"error": "Could not retrieve post from database",
 		})
 	}
 
 	return c.JSON(post)
 }
 
-// UpdateUser updates a post in the database by ID
+// UpdatePost updates a post in the database by ID
 func UpdatePost(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
 	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
@@ -99,15 +99,15 @@ func UpdatePost(c *fiber.Ctx) error {
 	update := bson.M{"$set": post}
 	if _, err := collection.UpdateOne(context.Background(), filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not update user in database",
+			"error": "Could not update post in database",
 		})
 	}
 
-	// Return the updated user
+	// Return the updated post
 	return c.JSON(post)
 }
 
-// DeleteUser deletes a post from the database by ID
+// DeletePost deletes a post from the database by ID
 func DeletePost(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
 	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
@@ -119,23 +119,23 @@ func DeletePost(c *fiber.Ctx) error {
 	res, err := collection.DeleteOne(context.Background(), bson.M{"_id": postID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not delete user from database",
+			"error": "Could not delete post from database",
 		})
 	}
 
 	// Check if a document was deleted
 	if res.DeletedCount == 0 {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "User not found",
+			"error": "Post not found",
 		})
 	}
 
 	return c.JSON(fiber.Map{
-		"message": "User deleted successfully",
+		"message": "Post deleted successfully",
 	})
 }
 
-// ListUsers retrieves all posts from the database
+// ListPosts retrieves all posts from the database
 func ListPosts(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
 	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
@@ -144,7 +144,7 @@ func ListPosts(c *fiber.Ctx) error {
 	cursor, err := collection.Find(context.Background(), bson.M{})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve users from database",
+			"error": "Could not retrieve posts from database",
 		})
 	}
 
@@ -152,10 +152,10 @@ func ListPosts(c *fiber.Ctx) error {
 	var posts []models.Post
 	if err := cursor.All(context.Background(), &posts); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not decode users from cursor",
+			"error": "Could not decode posts from cursor",
 		})
 	}
 
-	// Return the users
+	// Return the posts
 	return c.JSON(posts)
 }
