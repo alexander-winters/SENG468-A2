@@ -54,8 +54,8 @@ func PostReports(c *fiber.Ctx) error {
 	return c.JSON(results)
 }
 
-// GetUserCommentReports retrieves a report of comments created by a user
-func GetUserCommentReports(c *fiber.Ctx) error {
+// UserCommentReports retrieves a report of comments created by a user
+func UserCommentReports(c *fiber.Ctx) error {
 	// Get a handle to the comments collection
 	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
 
@@ -93,8 +93,8 @@ func GetUserCommentReports(c *fiber.Ctx) error {
 	return c.JSON(commentReports)
 }
 
-// GetLikeReports retrieves a report on likes given or received by a user
-func GetLikeReports(c *fiber.Ctx) error {
+// LikeReports retrieves a report on likes given or received by a user
+func LikeReports(c *fiber.Ctx) error {
 	// Get a handle to the likes collection
 	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("likes")
 

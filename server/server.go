@@ -47,6 +47,11 @@ func main() {
 	app.Put("/api/notifications/:id", routes.MarkNotificationAsRead)
 	app.Get("/api/notifications", routes.ListNotifications)
 
+	// Set up the routes for reports
+	app.Get("/api/reports/posts", routes.PostReports)
+	app.Get("/api/reports/comments", routes.UserCommentReports)
+	app.Get("/api/reports/likes", routes.LikeReports)
+
 	// Start the server on the specified port
 	port := os.Getenv("PORT")
 	if port == "" {
