@@ -27,7 +27,9 @@ func CreateUser(c *fiber.Ctx) error {
 	}
 
 	// Set the created time
-	user.CreatedAt = time.Now()
+	now := time.Now()
+	user.CreatedAt = now
+	user.UpdatedAt = now
 
 	// Set the user's friends to an emtpy array
 	user.ListOfFriends = []string{}
@@ -98,7 +100,7 @@ func UpdateUser(c *fiber.Ctx) error {
 	user.UpdatedAt = time.Now()
 
 	// Update the user in the database
-	filter := bson.M{"ID": userID}
+	filter := bson.M{"_id": userID}
 	update := bson.M{"$set": user}
 	if _, err := collection.UpdateOne(context.Background(), filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -119,7 +121,7 @@ func DeleteUser(c *fiber.Ctx) error {
 	userID := c.Params("ID")
 
 	// Delete the user from the database
-	res, err := collection.DeleteOne(context.Background(), bson.M{"username": userID})
+	res, err := collection.DeleteOne(context.Background(), bson.M{"_id": userID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not delete user from database",
