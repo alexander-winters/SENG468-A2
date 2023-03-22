@@ -6,12 +6,11 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/server/routes"
 )
 
 // Connect to MongoDB
-var client = mymongo.GetMongoClient()
+// var client = mymongo.GetMongoClient()
 
 func main() {
 	// Initialize a new Fiber app
