@@ -33,7 +33,7 @@ func CreateComment(c *fiber.Ctx) error {
 	res, err := collection.InsertOne(context.Background(), comment)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not insert user into database",
+			"error": "Could not insert comment into database",
 		})
 	}
 
@@ -107,7 +107,7 @@ func UpdateComment(c *fiber.Ctx) error {
 	update := bson.M{"$set": comment}
 	if _, err := collection.UpdateOne(context.Background(), filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not update user in database",
+			"error": "Could not update comment in database",
 		})
 	}
 
@@ -123,8 +123,16 @@ func DeleteComment(c *fiber.Ctx) error {
 	// Get the ID from the URL parameters
 	commentID := c.Params("ID")
 
+	// Convert the comment ID to a MongoDB ObjectID
+	objID, err := primitive.ObjectIDFromHex(commentID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid comment ID",
+		})
+	}
+
 	// Delete the post from the database
-	res, err := collection.DeleteOne(context.Background(), bson.M{"_id": commentID})
+	res, err := collection.DeleteOne(context.Background(), bson.M{"_id": objID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not delete comment from database",

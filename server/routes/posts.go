@@ -83,6 +83,14 @@ func UpdatePost(c *fiber.Ctx) error {
 	// Get the ID from the URL params
 	postID := c.Params("ID")
 
+	// Convert the post ID to a MongoDB ObjectID
+	objID, err := primitive.ObjectIDFromHex(postID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post ID",
+		})
+	}
+
 	// Parse the request body into a struct
 	var post models.Post
 	if err := c.BodyParser(&post); err != nil {
@@ -95,7 +103,7 @@ func UpdatePost(c *fiber.Ctx) error {
 	post.UpdatedAt = time.Now()
 
 	// Update the post in the database
-	filter := bson.M{"_id": postID}
+	filter := bson.M{"_id": objID}
 	update := bson.M{"$set": post}
 	if _, err := collection.UpdateOne(context.Background(), filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -115,8 +123,16 @@ func DeletePost(c *fiber.Ctx) error {
 	// Get the ID from the URL parameters
 	postID := c.Params("ID")
 
+	// Convert the post ID to a MongoDB ObjectID
+	objID, err := primitive.ObjectIDFromHex(postID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post ID",
+		})
+	}
+
 	// Delete the post from the database
-	res, err := collection.DeleteOne(context.Background(), bson.M{"_id": postID})
+	res, err := collection.DeleteOne(context.Background(), bson.M{"_id": objID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not delete post from database",
