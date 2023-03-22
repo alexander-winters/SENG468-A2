@@ -44,11 +44,9 @@ func main() {
 	app.Get("/api/comments", routes.ListComments)
 
 	// Set up the routes for notifications
-	app.Post("/api/notifications", CreateNotification)
-	app.Get("/api/notifications/:id", GetNotification)
-	app.Put("/api/notifications/:id", UpdateNotification)
-	app.Delete("/api/notifications/:id", DeleteNotification)
-	app.Get("/api/notifications", ListNotifications)
+	app.Post("/api/notifications", routes.CreateNotification)
+	app.Put("/api/notifications/:id", routes.MarkNotificationAsRead)
+	app.Get("/api/notifications", routes.ListNotifications)
 
 	// Start the server on the specified port
 	port := os.Getenv("PORT")

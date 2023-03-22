@@ -55,9 +55,9 @@ type Notification struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID     primitive.ObjectID `bson:"user_id" json:"user_id"`
 	Type       NotificationType   `bson:"type" json:"type"`
-	ObjectID   primitive.ObjectID `bson:"object_id" json:"object_id"`
+	PostID     primitive.ObjectID `bson:"post_id" json:"post_id"`
+	CommentID  primitive.ObjectID `bson:"comment_id" json:"comment_id"`
 	Content    string             `bson:"content" json:"content"`
 	ReadStatus bool               `bson:"read_status" json:"read_status"`
 	CreatedAt  time.Time          `bson:"created_at" json:"created_at,omitempty"`
-	UpdatedAt  time.Time          `bson:"updated_at" json:"updated_at,omitempty"`
 }
