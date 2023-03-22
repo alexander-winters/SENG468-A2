@@ -95,7 +95,7 @@ func UpdatePost(c *fiber.Ctx) error {
 	post.UpdatedAt = time.Now()
 
 	// Update the post in the database
-	filter := bson.M{"ID": postID}
+	filter := bson.M{"_id": postID}
 	update := bson.M{"$set": post}
 	if _, err := collection.UpdateOne(context.Background(), filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -116,7 +116,7 @@ func DeletePost(c *fiber.Ctx) error {
 	postID := c.Params("ID")
 
 	// Delete the post from the database
-	res, err := collection.DeleteOne(context.Background(), bson.M{"username": postID})
+	res, err := collection.DeleteOne(context.Background(), bson.M{"_id": postID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not delete user from database",
