@@ -61,3 +61,15 @@ type Notification struct {
 	ReadStatus bool               `bson:"read_status" json:"read_status"`
 	CreatedAt  time.Time          `bson:"created_at" json:"created_at,omitempty"`
 }
+
+// PostReport represents a report of the number of posts created by each user
+type PostReport struct {
+	UserID primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Count  int                `bson:"count" json:"count"`
+}
+
+// CommentReports represents a report on comments created by a user
+type CommentReports struct {
+	UserID        primitive.ObjectID `bson:"user_id" json:"user_id"`
+	TotalComments int                `bson:"total_comments" json:"total_comments"`
+}
