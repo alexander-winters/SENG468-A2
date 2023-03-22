@@ -6,16 +6,12 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/alexander-winters/SENG468-A2/mongo"
 	"github.com/alexander-winters/SENG468-A2/server/routes"
 )
 
 func main() {
 	// Initialize a new Fiber app
 	app := fiber.New()
-
-	// Connect to MongoDB
-	client := mongo.GetMongoClient()
 
 	// Set up a simple route
 	app.Get("/", func(c *fiber.Ctx) error {

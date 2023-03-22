@@ -7,13 +7,19 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 
-	"github.com/alexander-winters/SENG468-A2/mongo"
 	"github.com/alexander-winters/SENG468-A2/mongo/models"
 )
 
+// Connect to MongoDB
+var client = mongo.GetMongoClient()
+
 // CreateUser inserts a new user into the database
 func CreateUser(c *fiber.Ctx) error {
+	// Get a handle to the users collection
+	collection := client.Database("seng468_a2_db").Collection("users")
+
 	// Parse the request body into a struct
 	var user models.User
 	if err := c.BodyParser(&user); err != nil {
@@ -25,8 +31,11 @@ func CreateUser(c *fiber.Ctx) error {
 	// Set the created time
 	user.CreatedAt = time.Now()
 
+	// Set the user's friends to an emtpy array
+	user.ListOfFriends = []string{}
+
 	// Insert the user into the database
-	res, err := mongo.Users.InsertOne(context.Background(), user)
+	res, err := collection.InsertOne(context.Background(), user)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not insert user into database",
@@ -40,11 +49,14 @@ func CreateUser(c *fiber.Ctx) error {
 
 // GetUser retrieves a user from the database by ID
 func GetUser(c *fiber.Ctx) error {
+	// Get a handle to the users collection
+	collection := client.Database("seng468_a2_db").Collection("users")
+
 	// Get the user ID from the request parameters
-	username := c.Params("username")
+	userID := c.Params("ID")
 
 	// Convert the user ID to a MongoDB ObjectID
-	objID, err := primitive.ObjectIDFromHex(username)
+	objID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid user ID",
@@ -53,7 +65,7 @@ func GetUser(c *fiber.Ctx) error {
 
 	// Find the user in the database by ID
 	var user models.User
-	err = mongo.Users.FindOne(context.Background(), bson.M{"_id": objID}).Decode(&user)
+	err = collection.FindOne(context.Background(), bson.M{"_id": objID}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -68,10 +80,13 @@ func GetUser(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-// UpdateUser updates a user in the database by username
+// UpdateUser updates a user in the database by ID
 func UpdateUser(c *fiber.Ctx) error {
+	// Get a handle to the users collection
+	collection := client.Database("seng468_a2_db").Collection("users")
+
 	// Get the username from the URL params
-	username := c.Params("username")
+	userID := c.Params("ID")
 
 	// Parse the request body into a struct
 	var user models.User
@@ -85,9 +100,9 @@ func UpdateUser(c *fiber.Ctx) error {
 	user.UpdatedAt = time.Now()
 
 	// Update the user in the database
-	filter := bson.M{"username": username}
+	filter := bson.M{"username": userID}
 	update := bson.M{"$set": user}
-	if _, err := mongo.Users.UpdateOne(context.Background(), filter, update); err != nil {
+	if _, err := collection.UpdateOne(context.Background(), filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not update user in database",
 		})
@@ -97,13 +112,16 @@ func UpdateUser(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-// DeleteUser deletes a user from the database by username
+// DeleteUser deletes a user from the database by ID
 func DeleteUser(c *fiber.Ctx) error {
+	// Get a handle to the users collection
+	collection := client.Database("seng468_a2_db").Collection("users")
+
 	// Get the username from the URL parameters
-	username := c.Params("username")
+	userID := c.Params("ID")
 
 	// Delete the user from the database
-	res, err := mongo.Users.DeleteOne(context.Background(), bson.M{"username": username})
+	res, err := collection.DeleteOne(context.Background(), bson.M{"username": userID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not delete user from database",
@@ -124,8 +142,11 @@ func DeleteUser(c *fiber.Ctx) error {
 
 // ListUsers retrieves all users from the database
 func ListUsers(c *fiber.Ctx) error {
+	// Get a handle to the users collection
+	collection := client.Database("seng468_a2_db").Collection("users")
+
 	// Find all users in the database
-	cursor, err := mongo.Users.Find(context.Background(), bson.M{})
+	cursor, err := collection.Find(context.Background(), bson.M{})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve users from database",
