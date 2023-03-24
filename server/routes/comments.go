@@ -57,7 +57,7 @@ func CreateComment(c *fiber.Ctx) error {
 	}
 
 	// Add the comment to the post's comments array
-	post.Comments = append(post.Comments, comment.Content)
+	post.Comments = append(post.Comments, comment)
 
 	// Update the post in the database
 	_, err = postCollection.UpdateOne(context.Background(), bson.M{"postNum": postInt}, bson.M{"$set": bson.M{"comments": post.Comments}})

@@ -30,7 +30,7 @@ type Post struct {
 	Content          string             `bson:"content" json:"content"`
 	CreatedAt        time.Time          `bson:"created_at" json:"created_at,omitempty"`
 	UpdatedAt        time.Time          `bson:"updated_at" json:"updated_at,omitempty"`
-	Comments         []string           `bson:"comments" json:"comments"`
+	Comments         []Comment          `bson:"comments" json:"comments"`
 	NumberOfLikes    int                `bson:"number_of_likes" json:"number_of_likes"`
 	NumberOfComments int                `bson:"number_of_comments" json:"number_of_comments"`
 }
