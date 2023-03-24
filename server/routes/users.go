@@ -33,6 +33,8 @@ func CreateUser(c *fiber.Ctx) error {
 
 	// Set the user's friends to an emtpy array
 	user.ListOfFriends = []string{}
+	// Set the user's PostCount to 0
+	user.PostCount = 0
 
 	// Insert the user into the database
 	res, err := collection.InsertOne(context.Background(), user)
