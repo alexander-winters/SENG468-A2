@@ -16,6 +16,7 @@ type User struct {
 	Password      string             `bson:"password"`
 	DateOfBirth   time.Time          `bson:"date_of_birth"`
 	ListOfFriends []string           `bson:"list_of_friends"`
+	PostCount     int                `bson:"post_count" json:"post_count"`
 	CreatedAt     time.Time          `bson:"created_at" json:"created_at,omitempty"`
 	UpdatedAt     time.Time          `bson:"updated_at" json:"updated_at,omitempty"`
 }
@@ -24,6 +25,8 @@ type User struct {
 type Post struct {
 	ID               primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID           primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Username         string             `bson:"username" json:"username"`
+	PostNumber       int                `bson:"post_number" json:"post_number"`
 	Content          string             `bson:"content" json:"content"`
 	CreatedAt        time.Time          `bson:"created_at" json:"created_at,omitempty"`
 	UpdatedAt        time.Time          `bson:"updated_at" json:"updated_at,omitempty"`

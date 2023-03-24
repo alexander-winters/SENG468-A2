@@ -29,11 +29,12 @@ func main() {
 	app.Get("/api/users", routes.ListUsers)
 
 	// Set up the routes for posts
-	app.Post("/api/posts", routes.CreatePost)
-	app.Get("/api/posts/:id", routes.GetPost)
-	app.Put("/api/posts/:id", routes.UpdatePost)
-	app.Delete("/api/posts/:id", routes.DeletePost)
-	app.Get("/api/posts", routes.ListPosts)
+	app.Post("/api/users/:username/posts", routes.CreatePost)
+	app.Get("/api/users/:username/posts/:post_number", routes.GetPost)
+	app.Put("/api/users/:username/posts/:post_number", routes.UpdatePost)
+	app.Delete("/api/users/:username/posts/:post_number", routes.DeletePost)
+	app.Get("/api/users/:username/posts", routes.ListUserPosts)
+	app.Get("/api/posts", routes.ListAllPosts)
 
 	// Set up the routes for comments
 	app.Post("/api/comments", routes.CreateComment)
