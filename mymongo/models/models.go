@@ -17,6 +17,7 @@ type User struct {
 	DateOfBirth   time.Time          `bson:"date_of_birth"`
 	ListOfFriends []string           `bson:"list_of_friends"`
 	PostCount     int                `bson:"post_count" json:"post_count"`
+	Notifications []Notification     `bson:"notifications" json:"notifications"`
 	CreatedAt     time.Time          `bson:"created_at" json:"created_at,omitempty"`
 	UpdatedAt     time.Time          `bson:"updated_at" json:"updated_at,omitempty"`
 }
@@ -54,15 +55,18 @@ const (
 	PostCreatedNotification    NotificationType = "post_created"
 	CommentCreatedNotification NotificationType = "comment_created"
 	PostLikedNotification      NotificationType = "post_liked"
+	CommentLikedNotification   NotificationType = "comment_liked"
 )
 
 // Notification represents a notification in the database
 type Notification struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID     primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Username   string             `bson:"username" json:"username"`
 	Type       NotificationType   `bson:"type" json:"type"`
 	PostID     primitive.ObjectID `bson:"post_id" json:"post_id"`
 	CommentID  primitive.ObjectID `bson:"comment_id" json:"comment_id"`
+	Recipient  string             `bson:"recipient" json:"recipient"`
 	Content    string             `bson:"content" json:"content"`
 	ReadStatus bool               `bson:"read_status" json:"read_status"`
 	CreatedAt  time.Time          `bson:"created_at" json:"created_at,omitempty"`

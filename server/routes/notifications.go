@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
@@ -15,7 +16,8 @@ import (
 // CreateNotification inserts a new notification into the database
 func CreateNotification(c *fiber.Ctx) error {
 	// Get a handle to the notifications collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("notifications")
+	notificationCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("notifications")
+	userCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 
 	// Parse the request body into a struct
 	var notification models.Notification
@@ -29,15 +31,43 @@ func CreateNotification(c *fiber.Ctx) error {
 	notification.CreatedAt = time.Now()
 
 	// Insert the notification into the database
-	res, err := collection.InsertOne(context.Background(), notification)
+	res, err := notificationCollection.InsertOne(context.Background(), notification)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not insert notification into database",
 		})
 	}
 
-	// Set the ID of the notification and return it
+	// Set the ID of the notification
 	notification.ID = res.InsertedID.(primitive.ObjectID)
+
+	// Find the user in the database
+	var user models.User
+	err = userCollection.FindOne(context.Background(), bson.M{"username": notification.Recipient}).Decode(&user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "User not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve user from database",
+		})
+	}
+
+	// Add the notification to the user's array of notifications
+	user.Notifications = append(user.Notifications, notification)
+
+	// Update the user in the database
+	filter := bson.M{"username": notification.Recipient}
+	update := bson.M{"$set": bson.M{"notifications": user.Notifications}}
+	if _, err := userCollection.UpdateOne(context.Background(), filter, update); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not update user in database",
+		})
+	}
+
+	// Return the notification
 	return c.JSON(notification)
 }
 
