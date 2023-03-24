@@ -73,11 +73,13 @@ func CreateNotification(c *fiber.Ctx) error {
 
 // MarkNotificationAsRead updates the read status of a notification in the database by ID
 func MarkNotificationAsRead(c *fiber.Ctx) error {
-	// Get a handle to the notifications collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("notifications")
+	// Get a handle to the notifications and users collections
+	notificationsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("notifications")
+	usersCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 
-	// Get the ID from the URL params
+	// Get the ID and username from the URL params
 	notificationID := c.Params("ID")
+	username := c.Params("username")
 
 	// Convert the notification ID to a MongoDB ObjectID
 	objID, err := primitive.ObjectIDFromHex(notificationID)
@@ -87,10 +89,41 @@ func MarkNotificationAsRead(c *fiber.Ctx) error {
 		})
 	}
 
+	// Find the user in the database by username
+	var user models.User
+	err = usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "User not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve user from database",
+		})
+	}
+
+	// Update the notification status for the user
+	for i, notification := range user.Notifications {
+		if notification.ID == objID {
+			user.Notifications[i].ReadStatus = true
+			user.Notifications[i].UpdatedAt = time.Now()
+			break
+		}
+	}
+
+	// Update the user in the database
+	_, err = usersCollection.UpdateOne(context.Background(), bson.M{"username": username}, bson.M{"$set": bson.M{"notifications": user.Notifications}})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not update user in database",
+		})
+	}
+
 	// Update the notification in the database
 	filter := bson.M{"_id": objID}
 	update := bson.M{"$set": bson.M{"read_status": true, "updated_at": time.Now()}}
-	if _, err := collection.UpdateOne(context.Background(), filter, update); err != nil {
+	if _, err := notificationsCollection.UpdateOne(context.Background(), filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not update notification in database",
 		})

@@ -70,6 +70,7 @@ type Notification struct {
 	Content    string             `bson:"content" json:"content"`
 	ReadStatus bool               `bson:"read_status" json:"read_status"`
 	CreatedAt  time.Time          `bson:"created_at" json:"created_at,omitempty"`
+	UpdatedAt  time.Time          `bson:"updated_at" json:"updated_at,omitempty"`
 }
 
 // PostReport represents a report of the number of posts created by each user
