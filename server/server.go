@@ -46,7 +46,7 @@ func main() {
 	// Set up the routes for notifications
 	app.Post("/api/notifications", routes.CreateNotification)
 	app.Put("/api/notifications/:id", routes.MarkNotificationAsRead)
-	app.Get("/api/notifications", routes.ListNotifications)
+	app.Get("/api/notifications/:username", routes.ListNotifications)
 
 	// Set up the routes for reports
 	app.Get("/api/reports/posts", routes.PostReports)
