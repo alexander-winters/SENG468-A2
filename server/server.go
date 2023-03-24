@@ -23,9 +23,9 @@ func main() {
 
 	// Set up the routes for users
 	app.Post("/api/users", routes.CreateUser)
-	app.Get("/api/users/:id", routes.GetUser)
-	app.Put("/api/users/:id", routes.UpdateUser)
-	app.Delete("/api/users/:id", routes.DeleteUser)
+	app.Get("/api/users/:username", routes.GetUser)
+	app.Put("/api/users/:username", routes.UpdateUser)
+	app.Delete("/api/users/:username", routes.DeleteUser)
 	app.Get("/api/users", routes.ListUsers)
 
 	// Set up the routes for posts
