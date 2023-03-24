@@ -135,13 +135,33 @@ func MarkNotificationAsRead(c *fiber.Ctx) error {
 	})
 }
 
-// ListNotifications retrieves all notifications from the database
+// ListNotifications retrieves all notifications from the database by user
 func ListNotifications(c *fiber.Ctx) error {
 	// Get a handle to the notifications collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("notifications")
+	notificationCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("notifications")
 
-	// Find all notifications in the database
-	cursor, err := collection.Find(context.Background(), bson.M{})
+	// Get the username from the request parameters
+	username := c.Params("username")
+
+	// Get the query parameter for read status
+	readStatus := c.Query("read_status")
+
+	// Create a filter based on the username and read status
+	filter := bson.M{"username": username}
+	if readStatus != "" {
+		if readStatus == "true" {
+			filter["read_status"] = true
+		} else if readStatus == "false" {
+			filter["read_status"] = false
+		} else {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid read status",
+			})
+		}
+	}
+
+	// Find all notifications in the database that match the filter
+	cursor, err := notificationCollection.Find(context.Background(), filter)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve notifications from database",
