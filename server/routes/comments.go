@@ -80,25 +80,41 @@ func CreateComment(c *fiber.Ctx) error {
 	return c.JSON(comment)
 }
 
-// GetComment retrieves a comment from the database by ID
+// GetComment retrieves a comment from the database for a specific post by username and post number
 func GetComment(c *fiber.Ctx) error {
-	// Get a handle to the comments collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	// Get a handle to the comments and posts collections
+	commentCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
 
-	// Get the comment ID from the request parameters
-	commentID := c.Params("ID")
+	// Get the post number and username from the request parameters
+	postNum := c.Params("num")
+	username := c.Params("username")
 
-	// Convert the comment ID to a MongoDB ObjectID
-	objID, err := primitive.ObjectIDFromHex(commentID)
+	// Convert the post number to an integer
+	postInt, err := strconv.Atoi(postNum)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid comment ID",
+			"error": "Invalid post number",
 		})
 	}
 
-	// Find the comment in the database by ID
+	// Find the post in the database by post number and username
+	var post models.Post
+	err = postCollection.FindOne(context.Background(), bson.M{"postNum": postInt, "username": username}).Decode(&post)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Post not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve post from database",
+		})
+	}
+
+	// Find the comment in the database by post ID
 	var comment models.Comment
-	err = collection.FindOne(context.Background(), bson.M{"_id": objID}).Decode(&comment)
+	err = commentCollection.FindOne(context.Background(), bson.M{"postID": post.ID}).Decode(&comment)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
