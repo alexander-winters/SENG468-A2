@@ -30,6 +30,7 @@ type Post struct {
 	Content          string             `bson:"content" json:"content"`
 	CreatedAt        time.Time          `bson:"created_at" json:"created_at,omitempty"`
 	UpdatedAt        time.Time          `bson:"updated_at" json:"updated_at,omitempty"`
+	Comments         []string           `bson:"comments" json:"comments"`
 	NumberOfLikes    int                `bson:"number_of_likes" json:"number_of_likes"`
 	NumberOfComments int                `bson:"number_of_comments" json:"number_of_comments"`
 }
@@ -38,7 +39,9 @@ type Post struct {
 type Comment struct {
 	ID            primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	PostID        primitive.ObjectID `bson:"post_id" json:"post_id"`
+	PostNumber    int                `bson:"post_number" json:"post_number"`
 	UserID        primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Username      string             `bson:"username" json:"username"`
 	Content       string             `bson:"content" json:"content"`
 	CreatedAt     time.Time          `bson:"created_at" json:"created_at,omitempty"`
 	UpdatedAt     time.Time          `bson:"updated_at" json:"updated_at,omitempty"`

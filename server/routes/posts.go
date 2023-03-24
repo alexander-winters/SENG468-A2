@@ -48,6 +48,8 @@ func CreatePost(c *fiber.Ctx) error {
 	// Set the post number, username, and created time
 	post.PostNumber = user.PostCount + 1
 	post.Username = user.Username
+	// Initialize an empty array of comments
+	post.Comments = []string{}
 	now := time.Now()
 	post.CreatedAt = now
 	post.UpdatedAt = now

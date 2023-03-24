@@ -2,6 +2,7 @@ package routes
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,10 +14,11 @@ import (
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
 )
 
-// CreateComment inserts a new comment into the database
+// CreateComment inserts a new comment into the database for a specific post
 func CreateComment(c *fiber.Ctx) error {
-	// Get a handle to the comments collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	// Get a handle to the comments and posts collections
+	commentCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
 
 	// Parse the request body into a struct
 	var comment models.Comment
@@ -29,8 +31,44 @@ func CreateComment(c *fiber.Ctx) error {
 	// Set the created time
 	comment.CreatedAt = time.Now()
 
+	// Get the post number from the request parameters
+	postNum := c.Params("num")
+
+	// Convert the post number to an integer
+	postInt, err := strconv.Atoi(postNum)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post number",
+		})
+	}
+
+	// Find the post in the database by post number
+	var post models.Post
+	err = postCollection.FindOne(context.Background(), bson.M{"postNum": postInt}).Decode(&post)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Post not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve post from database",
+		})
+	}
+
+	// Add the comment to the post's comments array
+	post.Comments = append(post.Comments, comment.Content)
+
+	// Update the post in the database
+	_, err = postCollection.UpdateOne(context.Background(), bson.M{"postNum": postInt}, bson.M{"$set": bson.M{"comments": post.Comments}})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not update post in database",
+		})
+	}
+
 	// Insert the comment into the database
-	res, err := collection.InsertOne(context.Background(), comment)
+	res, err := commentCollection.InsertOne(context.Background(), comment)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not insert comment into database",
