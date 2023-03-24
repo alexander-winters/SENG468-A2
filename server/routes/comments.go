@@ -32,7 +32,7 @@ func CreateComment(c *fiber.Ctx) error {
 	comment.CreatedAt = time.Now()
 
 	// Get the post number from the request parameters
-	postNum := c.Params("num")
+	postNum := c.Params("post_number")
 
 	// Convert the post number to an integer
 	postInt, err := strconv.Atoi(postNum)
@@ -87,7 +87,7 @@ func GetComment(c *fiber.Ctx) error {
 	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
 
 	// Get the post number and username from the request parameters
-	postNum := c.Params("num")
+	postNum := c.Params("post_number")
 	username := c.Params("username")
 
 	// Convert the post number to an integer
@@ -127,6 +127,42 @@ func GetComment(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(comment)
+}
+
+// GetComments retrieves all comments for a post by post number
+func GetComments(c *fiber.Ctx) error {
+	// Get a handle to the comments collection
+	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+
+	// Get the post number from the request parameters
+	postNum := c.Params("post_number")
+
+	// Convert the post number to an integer
+	postInt, err := strconv.Atoi(postNum)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post number",
+		})
+	}
+
+	// Find all comments for the post in the database
+	cursor, err := collection.Find(context.Background(), bson.M{"postNum": postInt})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve comments from database",
+		})
+	}
+
+	// Decode the cursor into a slice of comments
+	var comments []models.Comment
+	if err := cursor.All(context.Background(), &comments); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not decode comments from cursor",
+		})
+	}
+
+	// Return the comments
+	return c.JSON(comments)
 }
 
 // UpdateComment updates a comment in the database by ID
