@@ -17,8 +17,8 @@ import (
 // CreatePost inserts a new post into the database
 func CreatePost(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
-	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
-	userCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
+	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
+	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Get the username from the URL parameters
 	username := c.Params("username")
@@ -28,7 +28,7 @@ func CreatePost(c *fiber.Ctx) error {
 	// Find the user in the database by username
 	go func() {
 		var user models.User
-		err := userCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+		err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -67,7 +67,7 @@ func CreatePost(c *fiber.Ctx) error {
 	postChan := make(chan error)
 	// Insert the post into the database
 	go func() {
-		_, err := postCollection.InsertOne(context.Background(), post)
+		_, err := postsCollection.InsertOne(context.Background(), post)
 		postChan <- err
 	}()
 
@@ -80,7 +80,7 @@ func CreatePost(c *fiber.Ctx) error {
 	userChan2 := make(chan error)
 	// Update the user in the database
 	go func() {
-		_, err := userCollection.UpdateOne(context.Background(), filter, update)
+		_, err := usersCollection.UpdateOne(context.Background(), filter, update)
 		userChan2 <- err
 	}()
 
@@ -104,7 +104,7 @@ func CreatePost(c *fiber.Ctx) error {
 // GetPost retrieves a post from the database by username and post number
 func GetPost(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
 
 	// Get the username and post number from the request parameters
 	username := c.Params("username")
@@ -120,7 +120,7 @@ func GetPost(c *fiber.Ctx) error {
 	// Find the post in the database by username and post number
 	go func() {
 		var post models.Post
-		err = collection.FindOne(context.Background(), bson.M{"username": username, "post_number": postNumber}).Decode(&post)
+		err = postsCollection.FindOne(context.Background(), bson.M{"username": username, "post_number": postNumber}).Decode(&post)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -144,8 +144,8 @@ func GetPost(c *fiber.Ctx) error {
 // UpdatePost updates a post in the database by ID
 func UpdatePost(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
-	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
-	userCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
+	postsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+	usersCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 	// Get the ID from the URL params
 	postID := c.Params("ID")
 
@@ -157,7 +157,7 @@ func UpdatePost(c *fiber.Ctx) error {
 	// Find the user in the database by username
 	go func() {
 		var user models.User
-		err := userCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+		err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -207,7 +207,7 @@ func UpdatePost(c *fiber.Ctx) error {
 	filter := bson.M{"_id": objID}
 	update := bson.M{"$set": post}
 	go func() {
-		_, err := postCollection.UpdateOne(context.Background(), filter, update)
+		_, err := postsCollection.UpdateOne(context.Background(), filter, update)
 		postChan <- err
 	}()
 
@@ -225,49 +225,63 @@ func UpdatePost(c *fiber.Ctx) error {
 
 // DeletePost deletes a post from the database by username and post number
 func DeletePost(c *fiber.Ctx) error {
-	// Get a handle to the posts collection
+	// Get handles to the posts and users collections in the database
 	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
 	userCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 
-	// Get the username and post number from the URL parameters
+	// Get the username and post number from the request parameters
 	username := c.Params("username")
 	postNumber, err := strconv.Atoi(c.Params("postNumber"))
 	if err != nil {
+		// Return an error message if the post number is invalid
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid post number",
 		})
 	}
 
-	// Find the user in the database by username
 	var user models.User
-	err = userCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from database",
-		})
-	}
-
-	// Find the post in the database by username and post number
 	var post models.Post
-	err = postCollection.FindOne(context.Background(), bson.M{"username": username, "post_number": postNumber}).Decode(&post)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Post not found",
-			})
+
+	// Set up a background context, error channel and done channel for the goroutines
+	ctx := context.Background()
+	errChan := make(chan error)
+	done := make(chan bool)
+
+	// Find the user in the database using a goroutine
+	go func() {
+		err = userCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+		errChan <- err
+		done <- true
+	}()
+
+	// Find the post in the database using a goroutine
+	go func() {
+		err = postCollection.FindOne(ctx, bson.M{"username": username, "post_number": postNumber}).Decode(&post)
+		errChan <- err
+		done <- true
+	}()
+
+	// Wait for both goroutines to complete or for an error to occur
+	for i := 0; i < 2; i++ {
+		select {
+		case err = <-errChan:
+			// Handle any errors that occurred during the goroutines
+			if err != nil {
+				if err == mongo.ErrNoDocuments {
+					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+						"error": "User or post not found",
+					})
+				}
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Could not retrieve user or post from database",
+				})
+			}
+		case <-done:
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve post from database",
-		})
 	}
 
 	// Delete the post from the database
-	res, err := postCollection.DeleteOne(context.Background(), bson.M{"_id": post.ID})
+	res, err := postCollection.DeleteOne(ctx, bson.M{"_id": post.ID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not delete post from database",
@@ -285,7 +299,7 @@ func DeletePost(c *fiber.Ctx) error {
 	user.PostCount--
 	filter := bson.M{"username": username}
 	update := bson.M{"$set": user}
-	if _, err := userCollection.UpdateOne(context.Background(), filter, update); err != nil {
+	if _, err := userCollection.UpdateOne(ctx, filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not update user in database",
 		})
