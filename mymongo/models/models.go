@@ -75,19 +75,22 @@ type Notification struct {
 
 // PostReport represents a report of the number of posts created by each user
 type PostReport struct {
-	UserID primitive.ObjectID `bson:"user_id" json:"user_id"`
-	Count  int                `bson:"count" json:"count"`
+	UserID   primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Username string             `bson:"username" json:"username"`
+	Count    int                `bson:"count" json:"count"`
 }
 
-// CommentReports represents a report on comments created by a user
-type CommentReports struct {
+// CommentReport represents a report on comments created by a user
+type CommentReport struct {
 	UserID        primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Username      string             `bson:"username" json:"username"`
 	TotalComments int                `bson:"total_comments" json:"total_comments"`
 }
 
 // LikeReports represents a report on likes given or received by a user
-type LikeReports struct {
+type LikeReport struct {
 	UserID        primitive.ObjectID `bson:"user_id" json:"user_id"`
+	Username      string             `bson:"username" json:"username"`
 	LikesGiven    int                `bson:"likes_given" json:"likes_given"`
 	LikesReceived int                `bson:"likes_received" json:"likes_received"`
 }

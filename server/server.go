@@ -49,9 +49,9 @@ func main() {
 	app.Get("/notifications/:username", routes.ListNotifications)
 
 	// Set up the routes for reports
-	app.Get("/reports/posts", routes.PostReports)
-	app.Get("/reports/comments", routes.UserCommentReports)
-	app.Get("/reports/likes", routes.LikeReports)
+	app.Get("/reports/user/posts", routes.PostReport)
+	app.Get("/reports/user/comments", routes.UserCommentReport)
+	app.Get("/reports/user/likes", routes.LikeReport)
 
 	// Start the server on the specified port
 	port := os.Getenv("PORT")

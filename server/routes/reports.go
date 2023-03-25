@@ -5,18 +5,26 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
 )
 
-func PostReports(c *fiber.Ctx) error {
+// PostReport retrieves a report of all posts created by a given user
+func PostReport(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+
+	// Get the user ID from the request parameters
+	userID := c.Params("user_id")
 
 	// Create the pipeline for the aggregation query
 	pipeline := bson.A{
+		bson.M{
+			"$match": bson.M{
+				"user_id": userID,
+			},
+		},
 		bson.M{
 			"$group": bson.M{
 				"_id": "$user_id",
@@ -35,7 +43,7 @@ func PostReports(c *fiber.Ctx) error {
 	}
 
 	// Execute the aggregation query
-	cursor, err := collection.Aggregate(context.Background(), pipeline)
+	cursor, err := postCollection.Aggregate(context.Background(), pipeline)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not generate report",
@@ -54,24 +62,25 @@ func PostReports(c *fiber.Ctx) error {
 	return c.JSON(results)
 }
 
-// UserCommentReports retrieves a report of comments created by a user
-func UserCommentReports(c *fiber.Ctx) error {
+// UserCommentReport retrieves a report of comments created by a user
+func UserCommentReport(c *fiber.Ctx) error {
 	// Get a handle to the comments collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	commentCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
 
-	// Get the user ID from the request parameters
-	userID := c.Params("id")
+	// Get the username from the request parameters
+	username := c.Params("username")
 
-	// Convert the user ID to a MongoDB ObjectID
-	objID, err := primitive.ObjectIDFromHex(userID)
-	if err != nil {
+	// Find the user ID from the users collection
+	userCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
+	var user models.User
+	if err := userCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid user ID",
+			"error": "User not found",
 		})
 	}
 
 	// Find all comments created by the user
-	cursor, err := collection.Find(context.Background(), bson.M{"user_id": objID})
+	cursor, err := commentCollection.Find(context.Background(), bson.M{"user_id": user.ID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve comments from database",
@@ -85,38 +94,42 @@ func UserCommentReports(c *fiber.Ctx) error {
 	}
 
 	// Create the comment reports object
-	commentReports := models.CommentReports{
-		UserID:        objID,
+	commentReports := models.CommentReport{
+		UserID:        user.ID,
+		Username:      user.Username,
 		TotalComments: totalComments,
 	}
 
 	return c.JSON(commentReports)
 }
 
-// LikeReports retrieves a report on likes given or received by a user
-func LikeReports(c *fiber.Ctx) error {
-	// Get a handle to the likes collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("likes")
+// LikeReport retrieves a report on likes given or received by a user
+func LikeReport(c *fiber.Ctx) error {
+	// Get a handle to the likes and users collections
+	likesCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("likes")
+	usersCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 
-	// Get the user ID from the URL params
-	userID := c.Params("id")
+	// Get the username from the URL params
+	username := c.Params("username")
 
-	// Convert the user ID to a MongoDB ObjectID
-	objID, err := primitive.ObjectIDFromHex(userID)
+	// Find the user document that matches the username and extract the ID
+	var user models.User
+	err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid user ID",
+			"error": "Invalid username",
 		})
 	}
+	userID := user.ID
 
 	// Create a pipeline to retrieve the total number of likes given and received by the user
 	pipeline := bson.A{
-		bson.M{"$match": bson.M{"user_id": objID}},
+		bson.M{"$match": bson.M{"user_id": userID}},
 		bson.M{"$group": bson.M{
 			"_id":         "$user_id",
 			"likes_given": bson.M{"$sum": 1},
 			"likes_received": bson.M{"$sum": bson.M{"$cond": bson.A{
-				bson.M{"$eq": bson.A{"$liked_by", objID}},
+				bson.M{"$eq": bson.A{"$liked_by", userID}},
 				1,
 				0,
 			}}},
@@ -124,7 +137,7 @@ func LikeReports(c *fiber.Ctx) error {
 	}
 
 	// Execute the pipeline and retrieve the results
-	cursor, err := collection.Aggregate(context.Background(), pipeline)
+	cursor, err := likesCollection.Aggregate(context.Background(), pipeline)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve likes from database",
@@ -132,7 +145,7 @@ func LikeReports(c *fiber.Ctx) error {
 	}
 
 	// Decode the cursor into a slice of LikeReports
-	var reports []models.LikeReports
+	var reports []models.LikeReport
 	if err := cursor.All(context.Background(), &reports); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not decode likes from cursor",
