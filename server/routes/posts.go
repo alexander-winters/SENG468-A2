@@ -23,19 +23,25 @@ func CreatePost(c *fiber.Ctx) error {
 	// Get the username from the URL parameters
 	username := c.Params("username")
 
+	// Create a channel to receive the user data
+	userChan := make(chan *models.User)
 	// Find the user in the database by username
-	var user models.User
-	err := userCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
+	go func() {
+		var user models.User
+		err := userCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "User not found",
+				})
+			}
+			c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not retrieve user from database",
 			})
+			return
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from database",
-		})
-	}
+		userChan <- &user
+	}()
 
 	// Parse the request body into a struct
 	var post models.Post
@@ -44,6 +50,9 @@ func CreatePost(c *fiber.Ctx) error {
 			"error": "Could not parse request body",
 		})
 	}
+
+	// Wait for the user data to be received from the channel
+	user := <-userChan
 
 	// Set the post number, username, and created time
 	post.PostNumber = user.PostCount + 1
@@ -54,19 +63,35 @@ func CreatePost(c *fiber.Ctx) error {
 	post.CreatedAt = now
 	post.UpdatedAt = now
 
+	// Create a channel to receive the result of the post insert
+	postChan := make(chan error)
 	// Insert the post into the database
-	_, err = postCollection.InsertOne(context.Background(), post)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not insert post into database",
-		})
-	}
+	go func() {
+		_, err := postCollection.InsertOne(context.Background(), post)
+		postChan <- err
+	}()
 
 	// Increment the user's post count and update the user in the database
 	user.PostCount++
 	filter := bson.M{"username": username}
 	update := bson.M{"$set": user}
-	if _, err := userCollection.UpdateOne(context.Background(), filter, update); err != nil {
+
+	// Create a channel to receive the result of the user update
+	userChan2 := make(chan error)
+	// Update the user in the database
+	go func() {
+		_, err := userCollection.UpdateOne(context.Background(), filter, update)
+		userChan2 <- err
+	}()
+
+	// Wait for the post insert and user update to complete
+	err1, err2 := <-postChan, <-userChan2
+	if err1 != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not insert post into database",
+		})
+	}
+	if err2 != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not update user in database",
 		})
