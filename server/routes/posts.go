@@ -2,7 +2,9 @@ package routes
 
 import (
 	"context"
+	"log"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -384,19 +386,52 @@ func ListAllPosts(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
 	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
 
-	// Find all posts in the database
-	cursor, err := collection.Find(context.Background(), bson.M{})
+	// Find all posts in the database using a cursor
+	ctx := context.Background()
+	cursor, err := collection.Find(ctx, bson.M{})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve posts from database",
 		})
 	}
 
-	// Decode the cursor into a slice of posts
+	// Define a channel to receive the decoded posts
+	postChan := make(chan models.Post)
+	defer close(postChan)
+
+	// Define a wait group to wait for all goroutines to finish
+	var wg sync.WaitGroup
+
+	// Iterate over the cursor and decode each post into a channel
+	for cursor.Next(ctx) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var post models.Post
+			if err := cursor.Decode(&post); err != nil {
+				log.Printf("Error decoding post: %s", err)
+				return
+			}
+			postChan <- post
+		}()
+	}
+
+	// Wait for all goroutines to finish decoding posts
+	go func() {
+		wg.Wait()
+		close(postChan)
+	}()
+
+	// Collect all decoded posts into a slice
 	var posts []models.Post
-	if err := cursor.All(context.Background(), &posts); err != nil {
+	for post := range postChan {
+		posts = append(posts, post)
+	}
+
+	// Check for errors during iteration
+	if err := cursor.Err(); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not decode posts from cursor",
+			"error": "Error during iteration",
 		})
 	}
 
