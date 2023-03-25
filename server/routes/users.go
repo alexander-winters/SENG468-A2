@@ -72,10 +72,26 @@ func GetUser(c *fiber.Ctx) error {
 	// Get the username from the request parameters
 	username := c.Params("username")
 
-	// Find the user in the database by username
-	var user models.User
-	err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-	if err != nil {
+	// Create a channel to receive the user and any errors
+	userChan := make(chan *models.User)
+	errChan := make(chan error)
+
+	// Concurrently find the user in the database by username
+	go func() {
+		var user models.User
+		err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		userChan <- &user
+	}()
+
+	// Wait for the user or an error to be received
+	select {
+	case user := <-userChan:
+		return c.JSON(user)
+	case err := <-errChan:
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "User not found",
@@ -85,8 +101,6 @@ func GetUser(c *fiber.Ctx) error {
 			"error": "Could not retrieve user from database",
 		})
 	}
-
-	return c.JSON(user)
 }
 
 // UpdateUser updates a user in the database by username
