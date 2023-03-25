@@ -202,21 +202,35 @@ func ListUsers(c *fiber.Ctx) error {
 	// Get a handle to the users collection
 	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
-	// Find all users in the database
-	cursor, err := usersCollection.Find(context.Background(), bson.M{})
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve users from database",
-		})
-	}
+	// Create a channel for receiving users
+	usersChan := make(chan []models.User)
 
-	// Decode the cursor into a slice of users
-	var users []models.User
-	if err := cursor.All(context.Background(), &users); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not decode users from cursor",
-		})
-	}
+	// Retrieve users from the database in a goroutine
+	go func() {
+		// Find all users in the database
+		cursor, err := usersCollection.Find(context.Background(), bson.M{})
+		if err != nil {
+			c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not retrieve users from database",
+			})
+			return
+		}
+
+		// Decode the cursor into a slice of users
+		var users []models.User
+		if err := cursor.All(context.Background(), &users); err != nil {
+			c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not decode users from cursor",
+			})
+			return
+		}
+
+		// Send the users to the channel
+		usersChan <- users
+	}()
+
+	// Receive the users from the channel
+	users := <-usersChan
 
 	// Return the users
 	return c.JSON(users)
