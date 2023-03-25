@@ -13,10 +13,21 @@ import (
 // PostReport retrieves a report of all posts created by a given user
 func PostReport(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
-	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+	postsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+	usersCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
 
-	// Get the user ID from the request parameters
-	userID := c.Params("user_id")
+	// Get the username from the request parameters
+	username := c.Params("username")
+
+	// Find the user document that matches the username and extract the ID
+	var user models.User
+	err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid username",
+		})
+	}
+	userID := user.ID
 
 	// Create the pipeline for the aggregation query
 	pipeline := bson.A{
@@ -43,7 +54,7 @@ func PostReport(c *fiber.Ctx) error {
 	}
 
 	// Execute the aggregation query
-	cursor, err := postCollection.Aggregate(context.Background(), pipeline)
+	cursor, err := postsCollection.Aggregate(context.Background(), pipeline)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not generate report",
@@ -64,23 +75,23 @@ func PostReport(c *fiber.Ctx) error {
 
 // UserCommentReport retrieves a report of comments created by a user
 func UserCommentReport(c *fiber.Ctx) error {
-	// Get a handle to the comments collection
-	commentCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	// Get a handle to the comments and users collection
+	commentsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	usersCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 
 	// Get the username from the request parameters
 	username := c.Params("username")
 
 	// Find the user ID from the users collection
-	userCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
 	var user models.User
-	if err := userCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user); err != nil {
+	if err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "User not found",
 		})
 	}
 
 	// Find all comments created by the user
-	cursor, err := commentCollection.Find(context.Background(), bson.M{"user_id": user.ID})
+	cursor, err := commentsCollection.Find(context.Background(), bson.M{"user_id": user.ID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve comments from database",
