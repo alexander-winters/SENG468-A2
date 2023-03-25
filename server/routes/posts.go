@@ -152,19 +152,25 @@ func UpdatePost(c *fiber.Ctx) error {
 	// Get the username from the URL parameters
 	username := c.Params("username")
 
+	// Create a channel to receive the user data
+	userChan := make(chan *models.User)
 	// Find the user in the database by username
-	var user models.User
-	err := userCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
+	go func() {
+		var user models.User
+		err := userCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "User not found",
+				})
+			}
+			c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not retrieve user from database",
 			})
+			return
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from database",
-		})
-	}
+		userChan <- &user
+	}()
 
 	// Convert the post ID to a MongoDB ObjectID
 	objID, err := primitive.ObjectIDFromHex(postID)
@@ -182,6 +188,9 @@ func UpdatePost(c *fiber.Ctx) error {
 		})
 	}
 
+	// Wait for the user data to be received from the channel
+	user := <-userChan
+
 	// Check if the post belongs to the user
 	if post.Username != user.Username {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -192,10 +201,19 @@ func UpdatePost(c *fiber.Ctx) error {
 	// Set the updated time
 	post.UpdatedAt = time.Now()
 
+	// Create a channel to receive the result of the post update
+	postChan := make(chan error)
 	// Update the post in the database
 	filter := bson.M{"_id": objID}
 	update := bson.M{"$set": post}
-	if _, err := postCollection.UpdateOne(context.Background(), filter, update); err != nil {
+	go func() {
+		_, err := postCollection.UpdateOne(context.Background(), filter, update)
+		postChan <- err
+	}()
+
+	// Wait for the post update to complete
+	err = <-postChan
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not update post in database",
 		})
