@@ -300,20 +300,38 @@ func ListComments(c *fiber.Ctx) error {
 		})
 	}
 
-	// Find all comments for the post in the database
-	cursor, err := commentsCollection.Find(context.Background(), bson.M{"postNum": postInt})
-	if err != nil {
+	// Create channels for error handling and synchronization
+	errChan := make(chan error)
+	commentsChan := make(chan []models.Comment)
+
+	ctx := context.Background()
+
+	// Concurrently find all comments for the post in the database
+	go func() {
+		cursor, err := commentsCollection.Find(ctx, bson.M{"postNum": postInt})
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// Decode the cursor into a slice of comments
+		var comments []models.Comment
+		if err := cursor.All(ctx, &comments); err != nil {
+			errChan <- err
+			return
+		}
+
+		commentsChan <- comments
+	}()
+
+	// Wait for the comments to be retrieved and handle any errors
+	var comments []models.Comment
+	select {
+	case err = <-errChan:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve comments from database",
 		})
-	}
-
-	// Decode the cursor into a slice of comments
-	var comments []models.Comment
-	if err := cursor.All(context.Background(), &comments); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not decode comments from cursor",
-		})
+	case comments = <-commentsChan:
 	}
 
 	// Return the comments
