@@ -2,6 +2,7 @@ package routes
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -151,24 +152,49 @@ func DeleteUser(c *fiber.Ctx) error {
 	// Get the username from the URL parameters
 	username := c.Params("username")
 
-	// Delete the user from the database
-	res, err := usersCollection.DeleteOne(context.Background(), bson.M{"username": username})
-	if err != nil {
+	// Use a Goroutine to delete the user from the database
+	errChan := make(chan error)
+	go func() {
+		// Delete the user from the database
+		res, err := usersCollection.DeleteOne(context.Background(), bson.M{"username": username})
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// Check if a document was deleted
+		if res.DeletedCount == 0 {
+			errChan <- fmt.Errorf("user not found")
+			return
+		}
+
+		errChan <- nil
+	}()
+
+	// Wait for the Goroutine to complete or timeout
+	select {
+	case err := <-errChan:
+		if err != nil {
+			if err.Error() == "User not found" {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "User not found",
+				})
+			}
+
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not delete user from database",
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"message": "User deleted successfully",
+		})
+
+	case <-time.After(5 * time.Second):
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not delete user from database",
+			"error": "Timed out while deleting user from database",
 		})
 	}
-
-	// Check if a document was deleted
-	if res.DeletedCount == 0 {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "User not found",
-		})
-	}
-
-	return c.JSON(fiber.Map{
-		"message": "User deleted successfully",
-	})
 }
 
 // ListUsers retrieves all users from the database
