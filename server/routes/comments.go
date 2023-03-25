@@ -201,13 +201,30 @@ func UpdateComment(c *fiber.Ctx) error {
 	// Set the updated time
 	comment.UpdatedAt = time.Now()
 
-	// Update the comment in the database
-	filter := bson.M{"_id": objID}
-	update := bson.M{"$set": comment}
-	if _, err := commentsCollection.UpdateOne(context.Background(), filter, update); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not update comment in database",
-		})
+	// Create channels for error handling and synchronization
+	errChan := make(chan error)
+	done := make(chan bool)
+
+	ctx := context.Background()
+
+	// Concurrently update the comment in the database
+	go func() {
+		filter := bson.M{"_id": objID}
+		update := bson.M{"$set": comment}
+		_, err := commentsCollection.UpdateOne(ctx, filter, update)
+		errChan <- err
+		done <- true
+	}()
+
+	// Wait for the comment to be updated and handle any errors
+	select {
+	case err = <-errChan:
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not update comment in database",
+			})
+		}
+	case <-done:
 	}
 
 	// Return the updated comment
