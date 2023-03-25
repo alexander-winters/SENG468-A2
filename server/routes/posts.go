@@ -384,11 +384,11 @@ func ListUserPosts(c *fiber.Ctx) error {
 // ListPosts retrieves all posts from the database
 func ListAllPosts(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
 
 	// Find all posts in the database using a cursor
 	ctx := context.Background()
-	cursor, err := collection.Find(ctx, bson.M{})
+	cursor, err := postsCollection.Find(ctx, bson.M{})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve posts from database",

@@ -16,9 +16,9 @@ import (
 
 // CreateComment inserts a new comment into the database for a specific post
 func CreateComment(c *fiber.Ctx) error {
-	// Get a handle to the comments and posts collections
-	commentCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
-	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+	// Get handles to the comments and posts collections
+	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
+	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
 
 	// Parse the request body into a struct
 	var comment models.Comment
@@ -42,37 +42,72 @@ func CreateComment(c *fiber.Ctx) error {
 		})
 	}
 
-	// Find the post in the database by post number
+	ctx := context.Background()
 	var post models.Post
-	err = postCollection.FindOne(context.Background(), bson.M{"postNum": postInt}).Decode(&post)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Post not found",
+	done := make(chan bool)
+	errChan := make(chan error)
+
+	// Concurrently find the post in the database by post number
+	go func() {
+		err = postsCollection.FindOne(ctx, bson.M{"postNum": postInt}).Decode(&post)
+		errChan <- err
+		done <- true
+	}()
+
+	// Wait for the post to be found and handle any errors
+	select {
+	case err = <-errChan:
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "Post not found",
+				})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not retrieve post from database",
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve post from database",
-		})
+	case <-done:
 	}
 
 	// Add the comment to the post's comments array
 	post.Comments = append(post.Comments, comment)
 
-	// Update the post in the database
-	_, err = postCollection.UpdateOne(context.Background(), bson.M{"postNum": postInt}, bson.M{"$set": bson.M{"comments": post.Comments}})
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not update post in database",
-		})
+	// Concurrently update the post in the database
+	go func() {
+		_, err = postsCollection.UpdateOne(ctx, bson.M{"postNum": postInt}, bson.M{"$set": bson.M{"comments": post.Comments}})
+		errChan <- err
+		done <- true
+	}()
+
+	// Wait for the post to be updated and handle any errors
+	select {
+	case err = <-errChan:
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not update post in database",
+			})
+		}
+	case <-done:
 	}
 
-	// Insert the comment into the database
-	res, err := commentCollection.InsertOne(context.Background(), comment)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not insert comment into database",
-		})
+	// Concurrently insert the comment into the database
+	var res *mongo.InsertOneResult
+	go func() {
+		res, err = commentsCollection.InsertOne(ctx, comment)
+		errChan <- err
+		done <- true
+	}()
+
+	// Wait for the comment to be inserted and handle any errors
+	select {
+	case err = <-errChan:
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not insert comment into database",
+			})
+		}
+	case <-done:
 	}
 
 	// Set the ID of the comment and return it
@@ -83,8 +118,8 @@ func CreateComment(c *fiber.Ctx) error {
 // GetComment retrieves a comment from the database for a specific post by username and post number
 func GetComment(c *fiber.Ctx) error {
 	// Get a handle to the comments and posts collections
-	commentCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
-	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
+	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
 
 	// Get the post number and username from the request parameters
 	postNum := c.Params("post_number")
@@ -100,7 +135,7 @@ func GetComment(c *fiber.Ctx) error {
 
 	// Find the post in the database by post number and username
 	var post models.Post
-	err = postCollection.FindOne(context.Background(), bson.M{"postNum": postInt, "username": username}).Decode(&post)
+	err = postsCollection.FindOne(context.Background(), bson.M{"postNum": postInt, "username": username}).Decode(&post)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -114,7 +149,7 @@ func GetComment(c *fiber.Ctx) error {
 
 	// Find the comment in the database by post ID
 	var comment models.Comment
-	err = commentCollection.FindOne(context.Background(), bson.M{"postID": post.ID}).Decode(&comment)
+	err = commentsCollection.FindOne(context.Background(), bson.M{"postID": post.ID}).Decode(&comment)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -132,7 +167,7 @@ func GetComment(c *fiber.Ctx) error {
 // UpdateComment updates a comment in the database by ID
 func UpdateComment(c *fiber.Ctx) error {
 	// Get a handle to the comments collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
 
 	// Get the ID from the URL params
 	commentID := c.Params("ID")
@@ -159,7 +194,7 @@ func UpdateComment(c *fiber.Ctx) error {
 	// Update the comment in the database
 	filter := bson.M{"_id": objID}
 	update := bson.M{"$set": comment}
-	if _, err := collection.UpdateOne(context.Background(), filter, update); err != nil {
+	if _, err := commentsCollection.UpdateOne(context.Background(), filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not update comment in database",
 		})
@@ -172,7 +207,7 @@ func UpdateComment(c *fiber.Ctx) error {
 // DeleteComment deletes a comment from the database by ID
 func DeleteComment(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
 
 	// Get the ID from the URL parameters
 	commentID := c.Params("ID")
@@ -186,7 +221,7 @@ func DeleteComment(c *fiber.Ctx) error {
 	}
 
 	// Delete the post from the database
-	res, err := collection.DeleteOne(context.Background(), bson.M{"_id": objID})
+	res, err := commentsCollection.DeleteOne(context.Background(), bson.M{"_id": objID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not delete comment from database",
@@ -208,7 +243,7 @@ func DeleteComment(c *fiber.Ctx) error {
 // ListComments retrieves all comments for a post by post number
 func ListComments(c *fiber.Ctx) error {
 	// Get a handle to the comments collection
-	collection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
 
 	// Get the post number from the request parameters
 	postNum := c.Params("post_number")
@@ -222,7 +257,7 @@ func ListComments(c *fiber.Ctx) error {
 	}
 
 	// Find all comments for the post in the database
-	cursor, err := collection.Find(context.Background(), bson.M{"postNum": postInt})
+	cursor, err := commentsCollection.Find(context.Background(), bson.M{"postNum": postInt})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve comments from database",
