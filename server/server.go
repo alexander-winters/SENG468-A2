@@ -22,36 +22,36 @@ func main() {
 	})
 
 	// Set up the routes for users
-	app.Post("/api/users", routes.CreateUser)
-	app.Get("/api/users/:username", routes.GetUser)
-	app.Put("/api/users/:username", routes.UpdateUser)
-	app.Delete("/api/users/:username", routes.DeleteUser)
-	app.Get("/api/users", routes.ListUsers)
+	app.Post("/users", routes.CreateUser)
+	app.Get("/users/:username", routes.GetUser)
+	app.Put("/users/:username", routes.UpdateUser)
+	app.Delete("/users/:username", routes.DeleteUser)
+	app.Get("/users", routes.ListUsers)
 
 	// Set up the routes for posts
-	app.Post("/api/users/:username/posts", routes.CreatePost)
-	app.Get("/api/users/:username/posts/:post_number", routes.GetPost)
-	app.Put("/api/users/:username/posts/:post_number", routes.UpdatePost)
-	app.Delete("/api/users/:username/posts/:post_number", routes.DeletePost)
-	app.Get("/api/users/:username/posts", routes.ListUserPosts)
-	app.Get("/api/posts", routes.ListAllPosts)
+	app.Post("/users/:username/posts", routes.CreatePost)
+	app.Get("/users/:username/posts/:post_number", routes.GetPost)
+	app.Put("/users/:username/posts/:post_number", routes.UpdatePost)
+	app.Delete("/users/:username/posts/:post_number", routes.DeletePost)
+	app.Get("/users/:username/posts", routes.ListUserPosts)
+	app.Get("/posts", routes.ListAllPosts)
 
 	// Set up the routes for comments
-	app.Post("/api/posts/:post_number/comments", routes.CreateComment)
-	app.Get("/api/posts/:post_number/comments/:id", routes.GetComment)
-	app.Put("/api/comments/:id", routes.UpdateComment)
-	app.Delete("/api/comments/:id", routes.DeleteComment)
-	app.Get("/api/posts/:post_number/comments", routes.ListComments)
+	app.Post("/posts/:post_number/comments", routes.CreateComment)
+	app.Get("/posts/:post_number/comments/:id", routes.GetComment)
+	app.Put("/comments/:id", routes.UpdateComment)
+	app.Delete("/comments/:id", routes.DeleteComment)
+	app.Get("/posts/:post_number/comments", routes.ListComments)
 
 	// Set up the routes for notifications
-	app.Post("/api/notifications", routes.CreateNotification)
-	app.Put("/api/notifications/:id", routes.MarkNotificationAsRead)
-	app.Get("/api/notifications/:username", routes.ListNotifications)
+	app.Post("/notifications", routes.CreateNotification)
+	app.Put("/notifications/:id", routes.MarkNotificationAsRead)
+	app.Get("/notifications/:username", routes.ListNotifications)
 
 	// Set up the routes for reports
-	app.Get("/api/reports/posts", routes.PostReports)
-	app.Get("/api/reports/comments", routes.UserCommentReports)
-	app.Get("/api/reports/likes", routes.LikeReports)
+	app.Get("/reports/posts", routes.PostReports)
+	app.Get("/reports/comments", routes.UserCommentReports)
+	app.Get("/reports/likes", routes.LikeReports)
 
 	// Start the server on the specified port
 	port := os.Getenv("PORT")
