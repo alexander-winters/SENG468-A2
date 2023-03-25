@@ -117,7 +117,7 @@ func CreateComment(c *fiber.Ctx) error {
 
 // GetComment retrieves a comment from the database for a specific post by username and post number
 func GetComment(c *fiber.Ctx) error {
-	// Get a handle to the comments and posts collections
+	// Get handles to the comments and posts collections
 	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
 	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
 
@@ -133,32 +133,42 @@ func GetComment(c *fiber.Ctx) error {
 		})
 	}
 
-	// Find the post in the database by post number and username
 	var post models.Post
-	err = postsCollection.FindOne(context.Background(), bson.M{"postNum": postInt, "username": username}).Decode(&post)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Post not found",
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve post from database",
-		})
-	}
-
-	// Find the comment in the database by post ID
 	var comment models.Comment
-	err = commentsCollection.FindOne(context.Background(), bson.M{"postID": post.ID}).Decode(&comment)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Comment not found",
-			})
+
+	ctx := context.Background()
+	errChan := make(chan error)
+	done := make(chan bool)
+
+	// Concurrently find the post in the database by post number and username
+	go func() {
+		err = postsCollection.FindOne(ctx, bson.M{"postNum": postInt, "username": username}).Decode(&post)
+		errChan <- err
+		done <- true
+	}()
+
+	// Concurrently find the comment in the database by post ID
+	go func() {
+		err = commentsCollection.FindOne(ctx, bson.M{"postID": post.ID}).Decode(&comment)
+		errChan <- err
+		done <- true
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case err = <-errChan:
+			if err != nil {
+				if err == mongo.ErrNoDocuments {
+					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+						"error": "Post or comment not found",
+					})
+				}
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Could not retrieve post or comment from database",
+				})
+			}
+		case <-done:
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve comment from database",
-		})
 	}
 
 	return c.JSON(comment)
