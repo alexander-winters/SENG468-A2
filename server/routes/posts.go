@@ -226,8 +226,8 @@ func UpdatePost(c *fiber.Ctx) error {
 // DeletePost deletes a post from the database by username and post number
 func DeletePost(c *fiber.Ctx) error {
 	// Get handles to the posts and users collections in the database
-	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
-	userCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
+	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
+	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Get the username and post number from the request parameters
 	username := c.Params("username")
@@ -249,14 +249,14 @@ func DeletePost(c *fiber.Ctx) error {
 
 	// Find the user in the database using a goroutine
 	go func() {
-		err = userCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+		err = usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
 		errChan <- err
 		done <- true
 	}()
 
 	// Find the post in the database using a goroutine
 	go func() {
-		err = postCollection.FindOne(ctx, bson.M{"username": username, "post_number": postNumber}).Decode(&post)
+		err = postsCollection.FindOne(ctx, bson.M{"username": username, "post_number": postNumber}).Decode(&post)
 		errChan <- err
 		done <- true
 	}()
@@ -281,7 +281,7 @@ func DeletePost(c *fiber.Ctx) error {
 	}
 
 	// Delete the post from the database
-	res, err := postCollection.DeleteOne(ctx, bson.M{"_id": post.ID})
+	res, err := postsCollection.DeleteOne(ctx, bson.M{"_id": post.ID})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not delete post from database",
@@ -299,7 +299,7 @@ func DeletePost(c *fiber.Ctx) error {
 	user.PostCount--
 	filter := bson.M{"username": username}
 	update := bson.M{"$set": user}
-	if _, err := userCollection.UpdateOne(ctx, filter, update); err != nil {
+	if _, err := usersCollection.UpdateOne(ctx, filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not update user in database",
 		})
@@ -313,28 +313,22 @@ func DeletePost(c *fiber.Ctx) error {
 // ListUserPosts retrieves all posts of a single user from the database by username
 func ListUserPosts(c *fiber.Ctx) error {
 	// Get a handle to the posts and users collections
-	postCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
-	userCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
+	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
+	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Get the username from the URL parameters
 	username := c.Params("username")
 
 	// Find the user in the database by username
 	var user models.User
-	err := userCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from database",
-		})
-	}
+	userChan := make(chan error)
+	go func() {
+		err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+		userChan <- err
+	}()
 
 	// Find all posts in the database for the specified user
-	cursor, err := postCollection.Find(context.Background(), bson.M{"username": user.Username})
+	cursor, err := postsCollection.Find(context.Background(), bson.M{"username": username})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve posts from database",
@@ -343,7 +337,39 @@ func ListUserPosts(c *fiber.Ctx) error {
 
 	// Decode the cursor into a slice of posts
 	var posts []models.Post
-	if err := cursor.All(context.Background(), &posts); err != nil {
+	postsChan := make(chan error)
+	go func() {
+		if err := cursor.All(context.Background(), &posts); err != nil {
+			postsChan <- err
+		}
+		postsChan <- nil
+	}()
+
+	// Check for any errors from the concurrent calls
+	var userErr, postsErr error
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-userChan:
+			if err != nil {
+				if err == mongo.ErrNoDocuments {
+					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+						"error": "User not found",
+					})
+				}
+				userErr = err
+			}
+		case err := <-postsChan:
+			if err != nil {
+				postsErr = err
+			}
+		}
+	}
+	if userErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve user from database",
+		})
+	}
+	if postsErr != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not decode posts from cursor",
 		})
