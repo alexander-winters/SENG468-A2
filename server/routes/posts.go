@@ -115,19 +115,28 @@ func GetPost(c *fiber.Ctx) error {
 		})
 	}
 
+	// Create a channel to receive the post data
+	postChan := make(chan *models.Post)
 	// Find the post in the database by username and post number
-	var post models.Post
-	err = collection.FindOne(context.Background(), bson.M{"username": username, "post_number": postNumber}).Decode(&post)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Post not found",
+	go func() {
+		var post models.Post
+		err = collection.FindOne(context.Background(), bson.M{"username": username, "post_number": postNumber}).Decode(&post)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "Post not found",
+				})
+			}
+			c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not retrieve post from database",
 			})
+			return
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve post from database",
-		})
-	}
+		postChan <- &post
+	}()
+
+	// Wait for the post data to be received from the channel
+	post := <-postChan
 
 	return c.JSON(post)
 }
