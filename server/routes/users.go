@@ -36,9 +36,24 @@ func CreateUser(c *fiber.Ctx) error {
 	// Set the user's PostCount to 0
 	user.PostCount = 0
 
-	// Insert the user into the database
-	res, err := collection.InsertOne(context.Background(), user)
-	if err != nil {
+	// Use a channel to send the result of the insert operation
+	resultChan := make(chan *mongo.InsertOneResult)
+
+	// Run the insert operation in a Go routine
+	go func() {
+		res, err := collection.InsertOne(context.Background(), user)
+		if err != nil {
+			resultChan <- nil
+			return
+		}
+		resultChan <- res
+	}()
+
+	// Wait for the insert operation to complete
+	res := <-resultChan
+
+	// Check if the insert operation was successful
+	if res == nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not insert user into database",
 		})
