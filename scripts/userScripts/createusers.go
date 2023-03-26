@@ -20,7 +20,7 @@ func randomString(n int) string {
 	return string(s)
 }
 
-func randomDate(minYear, maxYear int) time.Time {
+func randomDate(minYear int, maxYear int) time.Time {
 	year := rand.Intn(maxYear-minYear+1) + minYear
 	month := rand.Intn(12) + 1
 	day := rand.Intn(28) + 1 // Assume up to 28 days per month to simplify
@@ -39,7 +39,7 @@ func generateRandomUser() models.User {
 	return user
 }
 
-func CreateUsers() {
+func CreateRandomUsers(createUsers int) {
 	for i := 0; i < 1000; i++ {
 		user := generateRandomUser()
 
