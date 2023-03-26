@@ -2,6 +2,7 @@ package routes
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -327,9 +328,9 @@ func ListComments(c *fiber.Ctx) error {
 	// Wait for the comments to be retrieved and handle any errors
 	var comments []models.Comment
 	select {
-	case err = <-errChan:
+	case err := <-errChan:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve comments from database",
+			"error": fmt.Sprintf("Could not process request: %v", err),
 		})
 	case comments = <-commentsChan:
 	}

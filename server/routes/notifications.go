@@ -2,6 +2,7 @@ package routes
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -172,7 +173,7 @@ func MarkNotificationAsRead(c *fiber.Ctx) error {
 // ListNotifications retrieves all notifications from the database by user
 func ListNotifications(c *fiber.Ctx) error {
 	// Get a handle to the notifications collection
-	notificationCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("notifications")
+	notificationsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("notifications")
 
 	// Get the username from the request parameters
 	username := c.Params("username")
@@ -194,22 +195,40 @@ func ListNotifications(c *fiber.Ctx) error {
 		}
 	}
 
-	// Find all notifications in the database that match the filter
-	cursor, err := notificationCollection.Find(context.Background(), filter)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve notifications from database",
-		})
-	}
+	// Create a context
+	ctx := context.Background()
 
-	// Decode the cursor into a slice of notifications
-	var notifications []models.Notification
-	if err := cursor.All(context.Background(), &notifications); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not decode notifications from cursor",
-		})
-	}
+	// Create channels for error handling and synchronization
+	errChan := make(chan error, 1)
+	notificationsChan := make(chan []models.Notification, 1)
 
-	// Return the notifications
-	return c.JSON(notifications)
+	// Concurrently find all notifications in the database that match the filter
+	go func() {
+		cursor, err := notificationsCollection.Find(ctx, filter)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// Decode the cursor into a slice of notifications
+		var notifications []models.Notification
+		if err := cursor.All(ctx, &notifications); err != nil {
+			errChan <- err
+			return
+		}
+
+		// Send the notifications to the notifications channel
+		notificationsChan <- notifications
+	}()
+
+	// Wait for the concurrent task to finish and handle any errors
+	select {
+	case err := <-errChan:
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Could not process request: %v", err),
+		})
+	case notifications := <-notificationsChan:
+		// Return the notifications
+		return c.JSON(notifications)
+	}
 }
