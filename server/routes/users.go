@@ -298,38 +298,72 @@ func DeleteUser(c *fiber.Ctx) error {
 
 // ListUsers retrieves all users from the database
 func ListUsers(c *fiber.Ctx) error {
+	ctx := context.Background()
+
 	// Get a handle to the users collection
 	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
-	// Create a channel for receiving users
-	usersChan := make(chan []models.User)
+	// Get all user keys from Redis
+	userKeys, err := rdb.Keys(ctx, "user:*").Result()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not get user keys from Redis",
+		})
+	}
 
-	// Retrieve users from the database in a goroutine
-	go func() {
-		// Find all users in the database
-		cursor, err := usersCollection.Find(context.Background(), bson.M{})
-		if err != nil {
-			c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not retrieve users from database",
-			})
-			return
+	// Create a map to store users from Redis
+	redisUsers := make(map[string]models.User)
+
+	// If there are user keys in Redis, retrieve the user objects
+	if len(userKeys) > 0 {
+		// Retrieve the user objects from Redis and deserialize them
+		for _, key := range userKeys {
+			userJSON, err := rdb.Get(ctx, key).Result()
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Could not get user from Redis",
+				})
+			}
+
+			var user models.User
+			if err := json.Unmarshal([]byte(userJSON), &user); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Could not deserialize user from Redis",
+				})
+			}
+
+			redisUsers[user.Username] = user
 		}
+	}
 
-		// Decode the cursor into a slice of users
-		var users []models.User
-		if err := cursor.All(context.Background(), &users); err != nil {
-			c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not decode users from cursor",
-			})
-			return
+	// Find all users in the database
+	cursor, err := usersCollection.Find(context.Background(), bson.M{})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve users from database",
+		})
+	}
+
+	// Decode the cursor into a slice of users
+	var dbUsers []models.User
+	if err := cursor.All(context.Background(), &dbUsers); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not decode users from cursor",
+		})
+	}
+
+	// Merge users from Redis and the database
+	for _, user := range dbUsers {
+		if _, exists := redisUsers[user.Username]; !exists {
+			redisUsers[user.Username] = user
 		}
+	}
 
-		// Send the users to the channel
-		usersChan <- users
-	}()
-
-	// Receive the users from the channel
-	users := <-usersChan
+	// Convert the user map into a slice
+	users := make([]models.User, 0, len(redisUsers))
+	for _, user := range redisUsers {
+		users = append(users, user)
+	}
 
 	// Return the users
 	return c.JSON(users)
