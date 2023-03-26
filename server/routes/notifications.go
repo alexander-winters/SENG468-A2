@@ -111,44 +111,56 @@ func MarkNotificationAsRead(c *fiber.Ctx) error {
 		})
 	}
 
-	// Find the user in the database by username
-	var user models.User
-	err = usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
+	// Create a context
+	ctx := context.Background()
+
+	// Create channels for error handling and synchronization
+	errChan := make(chan error, 2)
+
+	// Concurrently find the user in the database and update the notification status
+	go func() {
+		var user models.User
+		err := usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// Update the notification status for the user
+		for i, notification := range user.Notifications {
+			if notification.ID == objID {
+				user.Notifications[i].ReadStatus = true
+				user.Notifications[i].UpdatedAt = time.Now()
+				break
+			}
+		}
+
+		// Update the user in the database
+		_, err = usersCollection.UpdateOne(ctx, bson.M{"username": username}, bson.M{"$set": bson.M{"notifications": user.Notifications}})
+		errChan <- err
+	}()
+
+	// Concurrently update the notification in the database
+	go func() {
+		filter := bson.M{"_id": objID}
+		update := bson.M{"$set": bson.M{"read_status": true, "updated_at": time.Now()}}
+		_, err := notificationsCollection.UpdateOne(ctx, filter, update)
+		errChan <- err
+	}()
+
+	// Wait for the concurrent tasks to finish and handle any errors
+	for i := 0; i < 2; i++ {
+		err := <-errChan
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "User not found",
+				})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not process request",
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from database",
-		})
-	}
-
-	// Update the notification status for the user
-	for i, notification := range user.Notifications {
-		if notification.ID == objID {
-			user.Notifications[i].ReadStatus = true
-			user.Notifications[i].UpdatedAt = time.Now()
-			break
-		}
-	}
-
-	// Update the user in the database
-	_, err = usersCollection.UpdateOne(context.Background(), bson.M{"username": username}, bson.M{"$set": bson.M{"notifications": user.Notifications}})
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not update user in database",
-		})
-	}
-
-	// Update the notification in the database
-	filter := bson.M{"_id": objID}
-	update := bson.M{"$set": bson.M{"read_status": true, "updated_at": time.Now()}}
-	if _, err := notificationsCollection.UpdateOne(context.Background(), filter, update); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not update notification in database",
-		})
 	}
 
 	// Return a success message
