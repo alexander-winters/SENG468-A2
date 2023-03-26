@@ -108,7 +108,7 @@ func PostReport(c *fiber.Ctx) error {
 	}
 }
 
-// UserCommentReport retrieves a report of comments created by a user
+// UserCommentReport retrieves a report of comments created by user
 func UserCommentReport(c *fiber.Ctx) error {
 	// Get a handle to the comments and users collection
 	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
@@ -117,32 +117,68 @@ func UserCommentReport(c *fiber.Ctx) error {
 	// Get the username from the request parameters
 	username := c.Params("username")
 
-	// Find the user ID from the users collection
-	var user models.User
-	if err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user); err != nil {
+	// Create a context
+	ctx := context.Background()
+
+	// Create channels for error handling and synchronization
+	errChan := make(chan error, 1)
+	userChan := make(chan models.User, 1)
+
+	// Concurrently find the user in the users collection
+	go func() {
+		var user models.User
+		err := usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		userChan <- user
+	}()
+
+	// Wait for the concurrent task to finish and handle any errors
+	var userID primitive.ObjectID
+	select {
+	case err := <-errChan:
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "User not found",
+			"error": fmt.Sprintf("User not found: %v", err),
 		})
+	case user := <-userChan:
+		userID = user.ID
 	}
 
-	// Find all comments created by the user
-	cursor, err := commentsCollection.Find(context.Background(), bson.M{"user_id": user.ID})
-	if err != nil {
+	// Create channels for comment cursor and total comments count
+	totalCommentsChan := make(chan int, 1)
+
+	// Concurrently find all comments created by the user and calculate the total number of comments
+	go func() {
+		cursor, err := commentsCollection.Find(ctx, bson.M{"user_id": userID})
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		totalComments := 0
+		for cursor.Next(ctx) {
+			totalComments++
+		}
+
+		totalCommentsChan <- totalComments
+	}()
+
+	// Wait for the concurrent task to finish and handle any errors
+	var totalComments int
+	select {
+	case err := <-errChan:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve comments from database",
+			"error": fmt.Sprintf("Could not retrieve comments from database: %v", err),
 		})
-	}
-
-	// Calculate the total number of comments
-	totalComments := 0
-	for cursor.Next(context.Background()) {
-		totalComments++
+	case totalComments = <-totalCommentsChan:
 	}
 
 	// Create the comment reports object
 	commentReports := models.CommentReport{
-		UserID:        user.ID,
-		Username:      user.Username,
+		UserID:        userID,
+		Username:      username,
 		TotalComments: totalComments,
 	}
 
@@ -158,15 +194,34 @@ func LikeReport(c *fiber.Ctx) error {
 	// Get the username from the URL params
 	username := c.Params("username")
 
-	// Find the user document that matches the username and extract the ID
-	var user models.User
-	err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-	if err != nil {
+	// Create a context
+	ctx := context.Background()
+
+	// Create channels for error handling and synchronization
+	errChan := make(chan error, 1)
+	userChan := make(chan models.User, 1)
+
+	// Concurrently find the user in the users collection
+	go func() {
+		var user models.User
+		err := usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		userChan <- user
+	}()
+
+	// Wait for the concurrent task to finish and handle any errors
+	var userID primitive.ObjectID
+	select {
+	case err := <-errChan:
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid username",
+			"error": fmt.Sprintf("Invalid username: %v", err),
 		})
+	case user := <-userChan:
+		userID = user.ID
 	}
-	userID := user.ID
 
 	// Create a pipeline to retrieve the total number of likes given and received by the user
 	pipeline := bson.A{
@@ -182,20 +237,34 @@ func LikeReport(c *fiber.Ctx) error {
 		}},
 	}
 
-	// Execute the pipeline and retrieve the results
-	cursor, err := likesCollection.Aggregate(context.Background(), pipeline)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve likes from database",
-		})
-	}
+	// Create channels for cursor and report results
+	reportsChan := make(chan []models.LikeReport, 1)
 
-	// Decode the cursor into a slice of LikeReports
+	// Concurrently execute the pipeline and retrieve the results
+	go func() {
+		cursor, err := likesCollection.Aggregate(ctx, pipeline)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		var reports []models.LikeReport
+		if err := cursor.All(ctx, &reports); err != nil {
+			errChan <- err
+			return
+		}
+
+		reportsChan <- reports
+	}()
+
+	// Wait for the concurrent task to finish and handle any errors
 	var reports []models.LikeReport
-	if err := cursor.All(context.Background(), &reports); err != nil {
+	select {
+	case err := <-errChan:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not decode likes from cursor",
+			"error": fmt.Sprintf("Could not retrieve likes from database: %v", err),
 		})
+	case reports = <-reportsChan:
 	}
 
 	// Return the reports
