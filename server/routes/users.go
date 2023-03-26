@@ -2,9 +2,11 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -13,6 +15,16 @@ import (
 	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
 )
+
+var rdb *redis.Client
+
+func init() {
+	rdb = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+}
 
 // CreateUser inserts a new user into the database
 func CreateUser(c *fiber.Ctx) error {
@@ -32,7 +44,7 @@ func CreateUser(c *fiber.Ctx) error {
 	user.CreatedAt = now
 	user.UpdatedAt = now
 
-	// Set the user's friends to an emtpy array
+	// Set the user's friends to an empty array
 	user.ListOfFriends = []string{}
 	// Set the user's PostCount to 0
 	user.PostCount = 0
@@ -62,6 +74,24 @@ func CreateUser(c *fiber.Ctx) error {
 
 	// Set the ID of the user and return it
 	user.ID = res.InsertedID.(primitive.ObjectID)
+
+	// Serialize the user object to JSON
+	userJSON, err := json.Marshal(user)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not serialize user object",
+		})
+	}
+
+	// Store the user object in Redis
+	ctx := context.Background()
+	err = rdb.Set(ctx, user.Username, userJSON, 0).Err()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not store user in Redis",
+		})
+	}
+
 	return c.JSON(user)
 }
 
