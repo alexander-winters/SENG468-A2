@@ -1,4 +1,4 @@
-package main
+package userScripts
 
 import (
 	"bytes"
@@ -39,7 +39,7 @@ func generateRandomUser() models.User {
 	return user
 }
 
-func main() {
+func CreateUsers() {
 	for i := 0; i < 1000; i++ {
 		user := generateRandomUser()
 
