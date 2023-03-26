@@ -16,8 +16,8 @@ import (
 // CreateNotification inserts a new notification into the database
 func CreateNotification(c *fiber.Ctx) error {
 	// Get a handle to the notifications collection
-	notificationCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("notifications")
-	userCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
+	notificationCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("notifications")
+	userCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Parse the request body into a struct
 	var notification models.Notification
@@ -30,42 +30,64 @@ func CreateNotification(c *fiber.Ctx) error {
 	// Set the created time
 	notification.CreatedAt = time.Now()
 
-	// Insert the notification into the database
-	res, err := notificationCollection.InsertOne(context.Background(), notification)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not insert notification into database",
-		})
+	ctx := context.Background()
+
+	// Create channels for error handling and synchronization
+	errChan := make(chan error)
+	insertedIDChan := make(chan primitive.ObjectID)
+
+	// Concurrently insert the notification into the database
+	go func() {
+		res, err := notificationCollection.InsertOne(ctx, notification)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		insertedIDChan <- res.InsertedID.(primitive.ObjectID)
+	}()
+
+	// Concurrently find the user and update their notifications
+	go func() {
+		var user models.User
+		err := userCollection.FindOne(ctx, bson.M{"username": notification.Recipient}).Decode(&user)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		// Add the notification to the user's array of notifications
+		user.Notifications = append(user.Notifications, notification)
+
+		// Update the user in the database
+		filter := bson.M{"username": notification.Recipient}
+		update := bson.M{"$set": bson.M{"notifications": user.Notifications}}
+		if _, err := userCollection.UpdateOne(ctx, filter, update); err != nil {
+			errChan <- err
+			return
+		}
+
+		errChan <- nil
+	}()
+
+	// Wait for the concurrent tasks to finish and handle any errors
+	var insertedID primitive.ObjectID
+	select {
+	case err := <-errChan:
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "User not found",
+				})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not process request",
+			})
+		}
+	case insertedID = <-insertedIDChan:
 	}
 
 	// Set the ID of the notification
-	notification.ID = res.InsertedID.(primitive.ObjectID)
-
-	// Find the user in the database
-	var user models.User
-	err = userCollection.FindOne(context.Background(), bson.M{"username": notification.Recipient}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from database",
-		})
-	}
-
-	// Add the notification to the user's array of notifications
-	user.Notifications = append(user.Notifications, notification)
-
-	// Update the user in the database
-	filter := bson.M{"username": notification.Recipient}
-	update := bson.M{"$set": bson.M{"notifications": user.Notifications}}
-	if _, err := userCollection.UpdateOne(context.Background(), filter, update); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not update user in database",
-		})
-	}
+	notification.ID = insertedID
 
 	// Return the notification
 	return c.JSON(notification)
@@ -74,8 +96,8 @@ func CreateNotification(c *fiber.Ctx) error {
 // MarkNotificationAsRead updates the read status of a notification in the database by ID
 func MarkNotificationAsRead(c *fiber.Ctx) error {
 	// Get a handle to the notifications and users collections
-	notificationsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("notifications")
-	usersCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
+	notificationsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("notifications")
+	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Get the ID and username from the URL params
 	notificationID := c.Params("ID")
@@ -138,7 +160,7 @@ func MarkNotificationAsRead(c *fiber.Ctx) error {
 // ListNotifications retrieves all notifications from the database by user
 func ListNotifications(c *fiber.Ctx) error {
 	// Get a handle to the notifications collection
-	notificationCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("notifications")
+	notificationCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("notifications")
 
 	// Get the username from the request parameters
 	username := c.Params("username")
