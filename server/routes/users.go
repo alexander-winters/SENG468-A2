@@ -103,26 +103,31 @@ func GetUser(c *fiber.Ctx) error {
 	// Get the username from the request parameters
 	username := c.Params("username")
 
-	// Create a channel to receive the user and any errors
-	userChan := make(chan *models.User)
-	errChan := make(chan error)
+	// Check Redis cache for the user
+	ctx := context.Background()
+	userJSON, err := rdb.Get(ctx, username).Result()
 
-	// Concurrently find the user in the database by username
-	go func() {
+	if err == nil {
+		// User found in Redis cache
 		var user models.User
-		err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+		err := json.Unmarshal([]byte(userJSON), &user)
 		if err != nil {
-			errChan <- err
-			return
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not deserialize user object",
+			})
 		}
-		userChan <- &user
-	}()
-
-	// Wait for the user or an error to be received
-	select {
-	case user := <-userChan:
 		return c.JSON(user)
-	case err := <-errChan:
+	} else if err != redis.Nil {
+		// Redis error occurred
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve user from Redis",
+		})
+	}
+
+	// User not found in Redis cache, query the database
+	var user models.User
+	err = usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "User not found",
@@ -132,6 +137,24 @@ func GetUser(c *fiber.Ctx) error {
 			"error": "Could not retrieve user from database",
 		})
 	}
+
+	// Store the user in Redis cache
+	userJSONBytes, err := json.Marshal(user)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not serialize user object",
+		})
+	}
+	userJSON = string(userJSONBytes)
+
+	err = rdb.Set(ctx, user.Username, userJSON, 0).Err()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not store user in Redis",
+		})
+	}
+
+	return c.JSON(user)
 }
 
 // UpdateUser updates a user in the database by username
