@@ -2,9 +2,11 @@ package routes
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
@@ -12,22 +14,41 @@ import (
 
 // PostReport retrieves a report of all posts created by a given user
 func PostReport(c *fiber.Ctx) error {
-	// Get a handle to the posts collection
-	postsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
-	usersCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+	// Get a handle to the posts and users collections
+	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
+	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Get the username from the request parameters
 	username := c.Params("username")
 
-	// Find the user document that matches the username and extract the ID
-	var user models.User
-	err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-	if err != nil {
+	// Create a context
+	ctx := context.Background()
+
+	// Create channels for error handling and synchronization
+	errChan := make(chan error, 1)
+	userChan := make(chan models.User, 1)
+
+	// Concurrently find the user document that matches the username
+	go func() {
+		var user models.User
+		err := usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		userChan <- user
+	}()
+
+	// Wait for the concurrent task to finish and handle any errors
+	var userID primitive.ObjectID
+	select {
+	case err := <-errChan:
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid username",
+			"error": fmt.Sprintf("Invalid username: %v", err),
 		})
+	case user := <-userChan:
+		userID = user.ID
 	}
-	userID := user.ID
 
 	// Create the pipeline for the aggregation query
 	pipeline := bson.A{
@@ -53,31 +74,45 @@ func PostReport(c *fiber.Ctx) error {
 		},
 	}
 
-	// Execute the aggregation query
-	cursor, err := postsCollection.Aggregate(context.Background(), pipeline)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not generate report",
-		})
-	}
+	// Create a channel for aggregation results
+	resultsChan := make(chan []models.PostReport, 1)
 
-	// Decode the results into a slice of PostReport objects
-	var results []models.PostReport
-	if err := cursor.All(context.Background(), &results); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not decode report results",
-		})
-	}
+	// Concurrently execute the aggregation query
+	go func() {
+		cursor, err := postsCollection.Aggregate(ctx, pipeline)
+		if err != nil {
+			errChan <- err
+			return
+		}
 
-	// Return the report
-	return c.JSON(results)
+		// Decode the results into a slice of PostReport objects
+		var results []models.PostReport
+		if err := cursor.All(ctx, &results); err != nil {
+			errChan <- err
+			return
+		}
+
+		// Send the results to the results channel
+		resultsChan <- results
+	}()
+
+	// Wait for the concurrent task to finish and handle any errors
+	select {
+	case err := <-errChan:
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Could not generate report: %v", err),
+		})
+	case results := <-resultsChan:
+		// Return the report
+		return c.JSON(results)
+	}
 }
 
 // UserCommentReport retrieves a report of comments created by a user
 func UserCommentReport(c *fiber.Ctx) error {
 	// Get a handle to the comments and users collection
-	commentsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
-	usersCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
+	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
+	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Get the username from the request parameters
 	username := c.Params("username")
@@ -117,8 +152,8 @@ func UserCommentReport(c *fiber.Ctx) error {
 // LikeReport retrieves a report on likes given or received by a user
 func LikeReport(c *fiber.Ctx) error {
 	// Get a handle to the likes and users collections
-	likesCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("likes")
-	usersCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
+	likesCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("likes")
+	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Get the username from the URL params
 	username := c.Params("username")
