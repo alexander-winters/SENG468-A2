@@ -233,6 +233,24 @@ func DeleteUser(c *fiber.Ctx) error {
 	// Get the username from the URL parameters
 	username := c.Params("username")
 
+	// Check Redis cache
+	ctx := context.Background()
+	_, err := rdb.Get(ctx, username).Result()
+	if err != redis.Nil && err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not get user from Redis",
+		})
+	}
+
+	if err != redis.Nil { // User found in Redis cache, delete it
+		err = rdb.Del(ctx, username).Err()
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not delete user from Redis",
+			})
+		}
+	}
+
 	// Use a Goroutine to delete the user from the database
 	errChan := make(chan error)
 	go func() {
