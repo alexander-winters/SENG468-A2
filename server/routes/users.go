@@ -176,21 +176,49 @@ func UpdateUser(c *fiber.Ctx) error {
 	// Set the updated time
 	user.UpdatedAt = time.Now()
 
-	// Use a Go routine to update the user in the database
-	updateChan := make(chan error)
-	go func() {
+	// Check Redis cache
+	ctx := context.Background()
+	userJSON, err := rdb.Get(ctx, username).Result()
+	if err != nil && err != redis.Nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not get user from Redis",
+		})
+	}
+
+	if err == redis.Nil { // User not in Redis cache, update in the database
 		filter := bson.M{"username": username}
 		update := bson.M{"$set": user}
 		_, err := usersCollection.UpdateOne(context.Background(), filter, update)
-		updateChan <- err
-	}()
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not update user in database",
+			})
+		}
+	} else { // User found in Redis cache, update and store it back
+		err = json.Unmarshal([]byte(userJSON), &user)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not deserialize user object",
+			})
+		}
 
-	// Wait for the update operation to complete
-	err := <-updateChan
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not update user in database",
-		})
+		// Update the user object
+		user.UpdatedAt = time.Now()
+
+		// Serialize the updated user object and store it back in Redis
+		userJSONBytes, err := json.Marshal(user)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not serialize user object",
+			})
+		}
+		userJSON = string(userJSONBytes)
+		err = rdb.Set(ctx, user.Username, userJSON, 0).Err()
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not store user in Redis",
+			})
+		}
 	}
 
 	// Return the updated user
