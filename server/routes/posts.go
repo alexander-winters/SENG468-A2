@@ -179,25 +179,48 @@ func UpdatePost(c *fiber.Ctx) error {
 	// Get the username from the URL parameters
 	username := c.Params("username")
 
+	ctx := context.Background()
+	// Try to get the user from Redis cache
+	userJSON, err := rdb.Get(ctx, "user:"+username).Result()
+
 	// Create a channel to receive the user data
 	userChan := make(chan *models.User)
-	// Find the user in the database by username
-	go func() {
-		var user models.User
-		err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-		if err != nil {
-			if err == mongo.ErrNoDocuments {
-				c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error": "User not found",
+
+	if err == redis.Nil {
+		// User not found in Redis cache, find the user in the database by username
+		go func() {
+			var user models.User
+			err := usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+			if err != nil {
+				if err == mongo.ErrNoDocuments {
+					c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+						"error": "User not found",
+					})
+				}
+				c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Could not retrieve user from database",
 				})
+				return
 			}
-			c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not retrieve user from database",
-			})
-			return
-		}
-		userChan <- &user
-	}()
+			userChan <- &user
+		}()
+	} else if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve user from Redis cache",
+		})
+	} else {
+		// Deserialize the user from Redis cache and send it to the channel
+		go func() {
+			var user models.User
+			if err := json.Unmarshal([]byte(userJSON), &user); err != nil {
+				c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Could not deserialize user from Redis cache",
+				})
+				return
+			}
+			userChan <- &user
+		}()
+	}
 
 	// Convert the post ID to a MongoDB ObjectID
 	objID, err := primitive.ObjectIDFromHex(postID)
@@ -234,7 +257,7 @@ func UpdatePost(c *fiber.Ctx) error {
 	filter := bson.M{"_id": objID}
 	update := bson.M{"$set": post}
 	go func() {
-		_, err := postsCollection.UpdateOne(context.Background(), filter, update)
+		_, err := postsCollection.UpdateOne(ctx, filter, update)
 		postChan <- err
 	}()
 
