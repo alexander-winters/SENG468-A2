@@ -1,0 +1,50 @@
+version: '3.9'
+
+services:
+  db:
+    build: ./mymongo
+    container_name: mymongo-container
+    ports:
+      - "27017:27017"
+    networks:
+      - my-network
+
+  redis:
+    build: ./redis-docker
+    container_name: myredis-container
+    ports:
+      - "6379:6379"
+    networks:
+      - my-network
+
+  web_server_1:
+    build: ./server
+    container_name: go-web-server-container-1
+    environment:
+      - PORT=3000
+    ports:
+      - "3001:3000"
+    networks:
+      - my-network
+
+  web_server_2:
+    build: ./server
+    container_name: go-web-server-container-2
+    environment:
+      - PORT=3000
+    ports:
+      - "3002:3000"
+    networks:
+      - my-network
+
+  nginx:
+    build: ./nginx-load-balancer
+    container_name: nginx-container
+    ports:
+      - "80:80"
+    networks:
+      - my-network
+
+networks:
+  my-network:
+    driver: bridge
