@@ -297,12 +297,29 @@ func DeletePost(c *fiber.Ctx) error {
 	errChan := make(chan error)
 	done := make(chan bool)
 
-	// Find the user in the database using a goroutine
-	go func() {
-		err = usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-		errChan <- err
+	// Try to get the user from Redis cache
+	userJSON, err := rdb.Get(ctx, "user:"+username).Result()
+
+	if err == redis.Nil {
+		// Find the user in the database using a goroutine
+		go func() {
+			err = usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+			errChan <- err
+			done <- true
+		}()
+	} else if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve user from Redis cache",
+		})
+	} else {
+		// Deserialize the user from Redis cache
+		if err := json.Unmarshal([]byte(userJSON), &user); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not deserialize user from Redis cache",
+			})
+		}
 		done <- true
-	}()
+	}
 
 	// Find the post in the database using a goroutine
 	go func() {
