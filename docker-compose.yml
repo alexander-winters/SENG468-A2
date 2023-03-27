@@ -17,8 +17,10 @@ services:
     networks:
       - my-network
 
-  web_server_1:
-    build: ./server
+  go-web-server-1:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     container_name: go-web-server-container-1
     environment:
       - PORT=3000
@@ -27,8 +29,10 @@ services:
     networks:
       - my-network
 
-  web_server_2:
-    build: ./server
+  go-web-server-2:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     container_name: go-web-server-container-2
     environment:
       - PORT=3000
