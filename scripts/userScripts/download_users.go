@@ -12,7 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-func DownloadUsers() {
+func DownloadUsersToFile(filename string) {
 	// Initialize the MongoDB client
 	mymongo.GetMongoClient()
 
@@ -30,14 +30,14 @@ func DownloadUsers() {
 	}
 	defer cursor.Close(ctx)
 
-	// Open a .txt file for writing
-	file, err := os.Create("users.txt")
+	// Open a file with the specified filename for writing
+	file, err := os.Create(filename)
 	if err != nil {
 		log.Fatalf("Error creating file: %v", err)
 	}
 	defer file.Close()
 
-	// Iterate through the users and save the required information to the .txt file
+	// Iterate through the users and save the required information to the file
 	var user models.User
 	userNumber := 1
 	for cursor.Next(ctx) {
@@ -59,5 +59,5 @@ func DownloadUsers() {
 		log.Printf("Error with cursor: %v", err)
 	}
 
-	fmt.Println("Users saved to users.txt")
+	fmt.Printf("Users saved to %s\n", filename)
 }
