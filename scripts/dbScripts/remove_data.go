@@ -12,6 +12,14 @@ import (
 
 var rdb *redis.Client
 
+func init() {
+	rdb = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+}
+
 func RemoveDBData() {
 	database := mymongo.GetMongoClient().Database("seng468-a2-db")
 
