@@ -79,10 +79,83 @@ func CreatePost(c *fiber.Ctx) error {
 	return c.JSON(post)
 }
 
-// GetPost retrieves a post from the database by username and post number
-func GetPost(c *fiber.Ctx) error {
+// GetPostbyUsername retrieves a post by username and postNumber, first checking Redis cache, then the database
+func GetPostByUsername(username string, postNumber int) (*models.Post, error) {
 	// Get a handle to the posts collection
 	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
+
+	// Check Redis cache for the post
+	ctx := context.Background()
+	postKey := fmt.Sprintf("post:%s:%d", username, postNumber)
+	postJSON, err := rdb.Get(ctx, postKey).Result()
+
+	if err == redis.Nil {
+		// Post not found in Redis cache, query the database
+		var post models.Post
+		err = postsCollection.FindOne(ctx, bson.M{"username": username, "post_number": postNumber}).Decode(&post)
+		if err != nil {
+			return nil, err
+		}
+
+		// Store the post in Redis cache
+		postJSONBytes, err := json.Marshal(post)
+		if err != nil {
+			return nil, err
+		}
+		postJSON = string(postJSONBytes)
+
+		err = rdb.Set(ctx, postKey, postJSON, 0).Err()
+		if err != nil {
+			return nil, err
+		}
+
+		return &post, nil
+	} else if err != nil {
+		// Redis error occurred
+		return nil, err
+	} else {
+		// Post found in Redis cache
+		var post models.Post
+		err := json.Unmarshal([]byte(postJSON), &post)
+		if err != nil {
+			return nil, err
+		}
+		return &post, nil
+	}
+
+}
+
+// GetPost retrieves a post from the database by username and post number
+func GetPost(c *fiber.Ctx) error {
+	// Get the username and post number from the request parameters
+	username := c.Params("username")
+	postNumber, err := strconv.Atoi(c.Params("postNumber"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post number",
+		})
+	}
+
+	// Retreive the post
+	post, err := GetPostByUsername(username, postNumber)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Post not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retreive post",
+		})
+	}
+
+	return c.JSON(post)
+}
+
+// UpdatePost updates a post in the database by username and post number
+func UpdatePost(c *fiber.Ctx) error {
+	// Get a handle to the posts collection
+	postsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
 
 	// Get the username and post number from the request parameters
 	username := c.Params("username")
@@ -93,112 +166,10 @@ func GetPost(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check Redis cache for the post
+	// GetPost
 	ctx := c.Context()
 	postKey := fmt.Sprintf("post:%s:%d", username, postNumber)
 	postJSON, err := rdb.Get(ctx, postKey).Result()
-
-	var post models.Post
-	if err == redis.Nil {
-		// Post not found in Redis cache, query the database
-		err = postsCollection.FindOne(ctx, bson.M{"username": username, "post_number": postNumber}).Decode(&post)
-		if err != nil {
-			if err == mongo.ErrNoDocuments {
-				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error": "Post not found",
-				})
-			}
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not retrieve post from database",
-			})
-		}
-
-		// Store the post in Redis cache
-		postJSONBytes, err := json.Marshal(post)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not serialize post object",
-			})
-		}
-		postJSON = string(postJSONBytes)
-
-		err = rdb.Set(ctx, postKey, postJSON, 0).Err()
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not store post in Redis",
-			})
-		}
-	} else if err != nil {
-		// Redis error occurred
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve post from Redis",
-		})
-	} else {
-		// Post found in Redis cache
-		err := json.Unmarshal([]byte(postJSON), &post)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not deserialize post object",
-			})
-		}
-	}
-
-	return c.JSON(post)
-}
-
-// UpdatePost updates a post in the database by ID
-func UpdatePost(c *fiber.Ctx) error {
-	// Get a handle to the posts collection
-	postsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
-	usersCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("users")
-	// Get the ID from the URL params
-	postID := c.Params("ID")
-
-	// Get the username from the URL parameters
-	username := c.Params("username")
-
-	ctx := context.Background()
-	// Try to get the user from Redis cache
-	userJSON, err := rdb.Get(ctx, "user:"+username).Result()
-
-	// Create a channel to receive the user data
-	userChan := make(chan *models.User)
-
-	if err == redis.Nil {
-		// User not found in Redis cache, find the user in the database by username
-		go func() {
-			var user models.User
-			err := usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-			if err != nil {
-				if err == mongo.ErrNoDocuments {
-					c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-						"error": "User not found",
-					})
-				}
-				c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "Could not retrieve user from database",
-				})
-				return
-			}
-			userChan <- &user
-		}()
-	} else if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from Redis cache",
-		})
-	} else {
-		// Deserialize the user from Redis cache and send it to the channel
-		go func() {
-			var user models.User
-			if err := json.Unmarshal([]byte(userJSON), &user); err != nil {
-				c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "Could not deserialize user from Redis cache",
-				})
-				return
-			}
-			userChan <- &user
-		}()
-	}
 
 	// Convert the post ID to a MongoDB ObjectID
 	objID, err := primitive.ObjectIDFromHex(postID)

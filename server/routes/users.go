@@ -111,6 +111,19 @@ func GetUserByUsername(username string) (*models.User, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// Store the user in Redis cache
+		userJSONBytes, err := json.Marshal(user)
+		if err != nil {
+			return nil, err
+		}
+		userJSON = string(userJSONBytes)
+
+		err = rdb.Set(ctx, "user:"+username, userJSON, 0).Err()
+		if err != nil {
+			return nil, err
+		}
+
 		return &user, nil
 	} else if err != nil {
 		return nil, err
