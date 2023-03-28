@@ -20,6 +20,7 @@ import (
 func CreatePost(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
 	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
+	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Get the username from the URL parameters
 	username := c.Params("username")
@@ -61,14 +62,31 @@ func CreatePost(c *fiber.Ctx) error {
 		})
 	}
 
-	// Increment the user's post count
+	// Increment the user's post count and update the user in the database
 	user.PostCount++
+	filter := bson.M{"username": username}
+	update := bson.M{"$set": bson.M{"postCount": user.PostCount}}
 
-	// Update the user in the database and Redis cache
-	err = UpdateUser(c.Context(), user)
+	_, err = usersCollection.UpdateOne(c.Context(), filter, update)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not update user",
+			"error": "Could not update user in database",
+		})
+	}
+
+	// Update the user in Redis cache
+	userJSONBytes, err := json.Marshal(user)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not serialize user object",
+		})
+	}
+	userJSON := string(userJSONBytes)
+
+	err = rdb.Set(c.Context(), "user:"+user.Username, userJSON, 0).Err()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not store user in Redis",
 		})
 	}
 
