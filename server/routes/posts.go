@@ -209,80 +209,21 @@ func UpdatePost(c *fiber.Ctx) error {
 
 // DeletePost deletes a post from the database by username and post number
 func DeletePost(c *fiber.Ctx) error {
-	// Get handles to the posts and users collections in the database
-	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
-	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
-
 	// Get the username and post number from the request parameters
 	username := c.Params("username")
 	postNumber, err := strconv.Atoi(c.Params("postNumber"))
 	if err != nil {
-		// Return an error message if the post number is invalid
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid post number",
 		})
 	}
 
-	var user models.User
-	var post models.Post
-
-	// Set up a background context, error channel and done channel for the goroutines
-	ctx := context.Background()
-	errChan := make(chan error)
-	done := make(chan bool)
-
-	// Try to get the user from Redis cache
-	userJSON, err := rdb.Get(ctx, "user:"+username).Result()
-
-	if err == redis.Nil {
-		// Find the user in the database using a goroutine
-		go func() {
-			err = usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-			errChan <- err
-			done <- true
-		}()
-	} else if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from Redis cache",
-		})
-	} else {
-		// Deserialize the user from Redis cache
-		if err := json.Unmarshal([]byte(userJSON), &user); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not deserialize user from Redis cache",
-			})
-		}
-		done <- true
-	}
-
-	// Find the post in the database using a goroutine
-	go func() {
-		err = postsCollection.FindOne(ctx, bson.M{"username": username, "post_number": postNumber}).Decode(&post)
-		errChan <- err
-		done <- true
-	}()
-
-	// Wait for both goroutines to complete or for an error to occur
-	for i := 0; i < 2; i++ {
-		select {
-		case err = <-errChan:
-			// Handle any errors that occurred during the goroutines
-			if err != nil {
-				if err == mongo.ErrNoDocuments {
-					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-						"error": "User or post not found",
-					})
-				}
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "Could not retrieve user or post from database",
-				})
-			}
-		case <-done:
-		}
-	}
+	// Get handles to the posts and users collections in the database
+	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
+	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Delete the post from the database
-	res, err := postsCollection.DeleteOne(ctx, bson.M{"_id": post.ID})
+	res, err := postsCollection.DeleteOne(c.Context(), bson.M{"username": username, "post_number": postNumber})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not delete post from database",
@@ -296,13 +237,30 @@ func DeletePost(c *fiber.Ctx) error {
 		})
 	}
 
-	// Decrement the user's post count and update the user in the database
+	// Retrieve the user and decrement the user's post count
+	user, err := GetUserByUsername(username)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve user",
+		})
+	}
 	user.PostCount--
+
+	// Update the user in the database
 	filter := bson.M{"username": username}
 	update := bson.M{"$set": user}
-	if _, err := usersCollection.UpdateOne(ctx, filter, update); err != nil {
+	if _, err := usersCollection.UpdateOne(c.Context(), filter, update); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not update user in database",
+		})
+	}
+
+	// Remove the post from Redis cache
+	postKey := fmt.Sprintf("post:%s:%d", username, postNumber)
+	err = rdb.Del(c.Context(), postKey).Err()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not remove post from Redis",
 		})
 	}
 
