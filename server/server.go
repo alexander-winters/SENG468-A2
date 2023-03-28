@@ -53,6 +53,11 @@ func main() {
 	app.Get("/reports/user/comments", routes.UserCommentReport)
 	app.Get("/reports/user/likes", routes.LikeReport)
 
+	// Initialize Kafka producer and consumer
+	kafkaBrokerURL := "kafka:9092" // Make sure to use the correct address for your Kafka broker
+	kafkaProducer := createKafkaProducer(kafkaBrokerURL)
+	kafkaConsumer := createKafkaConsumer(kafkaBrokerURL)
+
 	// Start the server on the specified port
 	port := os.Getenv("PORT")
 	if port == "" {

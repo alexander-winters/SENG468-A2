@@ -49,6 +49,25 @@ services:
     networks:
       - my-network
 
+  zookeeper:
+    build: ./kafka-docker/zookeeper
+    container_name: zookeeper-container
+    ports:
+      -"2181:2181"
+    networks:
+      - my-network
+  
+  kafka:
+    build: ./kafka-docker/kafka
+    container_name: kafka-container
+    depends_on:
+      - zookeeper
+    ports:
+      -"9092:9092"
+    networks:
+      - my-network
+
+
 networks:
   my-network:
     driver: bridge
