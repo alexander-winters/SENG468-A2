@@ -12,7 +12,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/alexander-winters/SENG468-A2/mymongo"
@@ -154,9 +153,6 @@ func GetPost(c *fiber.Ctx) error {
 
 // UpdatePost updates a post in the database by username and post number
 func UpdatePost(c *fiber.Ctx) error {
-	// Get a handle to the posts collection
-	postsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
-
 	// Get the username and post number from the request parameters
 	username := c.Params("username")
 	postNumber, err := strconv.Atoi(c.Params("postNumber"))
@@ -166,60 +162,49 @@ func UpdatePost(c *fiber.Ctx) error {
 		})
 	}
 
-	// GetPost
-	ctx := c.Context()
-	postKey := fmt.Sprintf("post:%s:%d", username, postNumber)
-	postJSON, err := rdb.Get(ctx, postKey).Result()
-
-	// Convert the post ID to a MongoDB ObjectID
-	objID, err := primitive.ObjectIDFromHex(postID)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid post ID",
-		})
-	}
-
 	// Parse the request body into a struct
-	var post models.Post
-	if err := c.BodyParser(&post); err != nil {
+	var updatedPost models.Post
+	if err := c.BodyParser(&updatedPost); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Could not parse request body",
 		})
 	}
 
-	// Wait for the user data to be received from the channel
-	user := <-userChan
-
-	// Check if the post belongs to the user
-	if post.Username != user.Username {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Post does not belong to user",
-		})
-	}
-
 	// Set the updated time
-	post.UpdatedAt = time.Now()
+	updatedPost.UpdatedAt = time.Now()
 
-	// Create a channel to receive the result of the post update
-	postChan := make(chan error)
+	// Get a handle to the posts collection
+	postsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+
 	// Update the post in the database
-	filter := bson.M{"_id": objID}
-	update := bson.M{"$set": post}
-	go func() {
-		_, err := postsCollection.UpdateOne(ctx, filter, update)
-		postChan <- err
-	}()
-
-	// Wait for the post update to complete
-	err = <-postChan
+	filter := bson.M{"username": username, "post_number": postNumber}
+	update := bson.M{"$set": updatedPost}
+	_, err = postsCollection.UpdateOne(c.Context(), filter, update)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not update post in database",
 		})
 	}
 
+	// Update the post in Redis cache
+	postKey := fmt.Sprintf("post:%s:%d", username, postNumber)
+	postJSONBytes, err := json.Marshal(updatedPost)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not serialize post object",
+		})
+	}
+	postJSON := string(postJSONBytes)
+
+	err = rdb.Set(c.Context(), postKey, postJSON, 0).Err()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not store post in Redis",
+		})
+	}
+
 	// Return the updated post
-	return c.JSON(post)
+	return c.JSON(updatedPost)
 }
 
 // DeletePost deletes a post from the database by username and post number
