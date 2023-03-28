@@ -126,7 +126,7 @@ func GetPostByUsername(username string, postNumber int) (*models.Post, error) {
 func GetPost(c *fiber.Ctx) error {
 	// Get the username and post number from the request parameters
 	username := c.Params("username")
-	postNumber, err := strconv.Atoi(c.Params("postNumber"))
+	postNumber, err := strconv.Atoi(c.Params("post_number"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid post number",
@@ -209,7 +209,7 @@ func UpdatePost(c *fiber.Ctx) error {
 func DeletePost(c *fiber.Ctx) error {
 	// Get the username and post number from the request parameters
 	username := c.Params("username")
-	postNumber, err := strconv.Atoi(c.Params("postNumber"))
+	postNumber, err := strconv.Atoi(c.Params("post_number"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid post number",

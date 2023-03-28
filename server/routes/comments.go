@@ -2,10 +2,12 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -21,6 +23,28 @@ func CreateComment(c *fiber.Ctx) error {
 	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
 	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
 
+	// Get the username and post number from the request parameters
+	username := c.Params("username")
+	postNumber, err := strconv.Atoi(c.Params("post_number"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post number",
+		})
+	}
+
+	// Retrieve the post by username and postNumber
+	post, err := GetPostByUsername(username, postNumber)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "User not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve user",
+		})
+	}
+
 	// Parse the request body into a struct
 	var comment models.Comment
 	if err := c.BodyParser(&comment); err != nil {
@@ -32,83 +56,37 @@ func CreateComment(c *fiber.Ctx) error {
 	// Set the created time
 	comment.CreatedAt = time.Now()
 
-	// Get the post number from the request parameters
-	postNum := c.Params("post_number")
-
-	// Convert the post number to an integer
-	postInt, err := strconv.Atoi(postNum)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid post number",
-		})
-	}
-
-	ctx := context.Background()
-	var post models.Post
-	done := make(chan bool)
-	errChan := make(chan error)
-
-	// Concurrently find the post in the database by post number
-	go func() {
-		err = postsCollection.FindOne(ctx, bson.M{"postNum": postInt}).Decode(&post)
-		errChan <- err
-		done <- true
-	}()
-
-	// Wait for the post to be found and handle any errors
-	select {
-	case err = <-errChan:
-		if err != nil {
-			if err == mongo.ErrNoDocuments {
-				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error": "Post not found",
-				})
-			}
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not retrieve post from database",
-			})
-		}
-	case <-done:
-	}
-
 	// Add the comment to the post's comments array
 	post.Comments = append(post.Comments, comment)
 
-	// Concurrently update the post in the database
-	go func() {
-		_, err = postsCollection.UpdateOne(ctx, bson.M{"postNum": postInt}, bson.M{"$set": bson.M{"comments": post.Comments}})
-		errChan <- err
-		done <- true
-	}()
-
-	// Wait for the post to be updated and handle any errors
-	select {
-	case err = <-errChan:
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not update post in database",
-			})
-		}
-	case <-done:
+	// Update the comment in the database
+	res, err := commentsCollection.InsertOne(c.Context(), comment)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not insert comment into database",
+		})
 	}
 
-	// Concurrently insert the comment into the database
-	var res *mongo.InsertOneResult
-	go func() {
-		res, err = commentsCollection.InsertOne(ctx, comment)
-		errChan <- err
-		done <- true
-	}()
+	// Update the post in the database
+	filter := bson.M{"username": username, "post_number": postNumber}
+	update := bson.M{"$set": bson.M{"comments": post.Comments}}
+	if _, err := postsCollection.UpdateOne(c.Context(), filter, update); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not update post in database",
+		})
+	}
 
-	// Wait for the comment to be inserted and handle any errors
-	select {
-	case err = <-errChan:
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not insert comment into database",
-			})
-		}
-	case <-done:
+	// Update the post in the Redis cache
+	postJSON, err := json.Marshal(post)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not serialize post to Redis cache",
+		})
+	}
+	if err := rdb.Set(c.Context(), "post:"+username+":"+strconv.Itoa(postNumber), postJSON, 0).Err(); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not set post in Redis cache",
+		})
 	}
 
 	// Set the ID of the comment and return it
@@ -137,20 +115,34 @@ func GetComment(c *fiber.Ctx) error {
 	var post models.Post
 	var comment models.Comment
 
-	ctx := context.Background()
+	ctx := c.Context()
 	errChan := make(chan error)
 	done := make(chan bool)
 
-	// Concurrently find the post in the database by post number and username
+	// Concurrently find the post in the Redis cache or the database by post number and username
 	go func() {
-		err = postsCollection.FindOne(ctx, bson.M{"postNum": postInt, "username": username}).Decode(&post)
+		cacheKey := "post:" + username + ":" + strconv.Itoa(postInt)
+		if err := rdb.Get(ctx, cacheKey).Scan(&post); err == redis.Nil {
+			err = postsCollection.FindOne(ctx, bson.M{"postNum": postInt, "username": username}).Decode(&post)
+			if err == nil {
+				postJSON, _ := json.Marshal(post)
+				rdb.Set(ctx, cacheKey, postJSON, 0)
+			}
+		}
 		errChan <- err
 		done <- true
 	}()
 
-	// Concurrently find the comment in the database by post ID
+	// Concurrently find the comment in the Redis cache or the database by post ID
 	go func() {
-		err = commentsCollection.FindOne(ctx, bson.M{"postID": post.ID}).Decode(&comment)
+		cacheKey := "comment:" + post.ID.Hex()
+		if err := rdb.Get(ctx, cacheKey).Scan(&comment); err == redis.Nil {
+			err = commentsCollection.FindOne(ctx, bson.M{"postID": post.ID}).Decode(&comment)
+			if err == nil {
+				commentJSON, _ := json.Marshal(comment)
+				rdb.Set(ctx, cacheKey, commentJSON, 0)
+			}
+		}
 		errChan <- err
 		done <- true
 	}()
@@ -165,7 +157,7 @@ func GetComment(c *fiber.Ctx) error {
 					})
 				}
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "Could not retrieve post or comment from database",
+					"error": "Could not retrieve post or comment from database or cache",
 				})
 			}
 		case <-done:
