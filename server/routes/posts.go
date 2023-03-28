@@ -3,6 +3,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"strconv"
 	"sync"
@@ -22,52 +23,21 @@ import (
 func CreatePost(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
 	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
-	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Get the username from the URL parameters
 	username := c.Params("username")
 
-	ctx := context.Background()
-	// Try to get the user from Redis cache
-	userJSON, err := rdb.Get(ctx, "user:"+username).Result()
-
-	// Create a channel to receive the user data
-	userChan := make(chan *models.User)
-
-	if err == redis.Nil {
-		// User not found in Redis cache, find the user in the database by username
-		go func() {
-			var user models.User
-			err := usersCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
-			if err != nil {
-				if err == mongo.ErrNoDocuments {
-					c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-						"error": "User not found",
-					})
-				}
-				c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "Could not retrieve user from database",
-				})
-				return
-			}
-			userChan <- &user
-		}()
-	} else if err != nil {
+	// Retrieve the user by username
+	user, err := GetUserByUsername(username)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "User not found",
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from Redis cache",
+			"error": "Could not retrieve user",
 		})
-	} else {
-		// Deserialize the user from Redis cache and send it to the channel
-		go func() {
-			var user models.User
-			if err := json.Unmarshal([]byte(userJSON), &user); err != nil {
-				c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "Could not deserialize user from Redis cache",
-				})
-				return
-			}
-			userChan <- &user
-		}()
 	}
 
 	// Parse the request body into a struct
@@ -78,49 +48,30 @@ func CreatePost(c *fiber.Ctx) error {
 		})
 	}
 
-	// Wait for the user data to be received from the channel
-	user := <-userChan
-
 	// Set the post number, username, and created time
 	post.PostNumber = user.PostCount + 1
 	post.Username = user.Username
-	// Initialize an empty array of comments
 	post.Comments = []models.Comment{}
 	now := time.Now()
 	post.CreatedAt = now
 	post.UpdatedAt = now
 
-	// Create a channel to receive the result of the post insert
-	postChan := make(chan error)
 	// Insert the post into the database
-	go func() {
-		_, err := postsCollection.InsertOne(ctx, post)
-		postChan <- err
-	}()
-
-	// Increment the user's post count and update the user in the database
-	user.PostCount++
-	filter := bson.M{"username": username}
-	update := bson.M{"$set": user}
-
-	// Create a channel to receive the result of the user update
-	userChan2 := make(chan error)
-	// Update the user in the database
-	go func() {
-		_, err := usersCollection.UpdateOne(ctx, filter, update)
-		userChan2 <- err
-	}()
-
-	// Wait for the post insert and user update to complete
-	err1, err2 := <-postChan, <-userChan2
-	if err1 != nil {
+	_, err = postsCollection.InsertOne(c.Context(), post)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not insert post into database",
 		})
 	}
-	if err2 != nil {
+
+	// Increment the user's post count
+	user.PostCount++
+
+	// Update the user in the database and Redis cache
+	err = UpdateUser(c.Context(), user)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not update user in database",
+			"error": "Could not update user",
 		})
 	}
 
@@ -142,28 +93,55 @@ func GetPost(c *fiber.Ctx) error {
 		})
 	}
 
-	// Create a channel to receive the post data
-	postChan := make(chan *models.Post)
-	// Find the post in the database by username and post number
-	go func() {
-		var post models.Post
-		err = postsCollection.FindOne(context.Background(), bson.M{"username": username, "post_number": postNumber}).Decode(&post)
+	// Check Redis cache for the post
+	ctx := c.Context()
+	postKey := fmt.Sprintf("post:%s:%d", username, postNumber)
+	postJSON, err := rdb.Get(ctx, postKey).Result()
+
+	var post models.Post
+	if err == redis.Nil {
+		// Post not found in Redis cache, query the database
+		err = postsCollection.FindOne(ctx, bson.M{"username": username, "post_number": postNumber}).Decode(&post)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
-				c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 					"error": "Post not found",
 				})
 			}
-			c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Could not retrieve post from database",
 			})
-			return
 		}
-		postChan <- &post
-	}()
 
-	// Wait for the post data to be received from the channel
-	post := <-postChan
+		// Store the post in Redis cache
+		postJSONBytes, err := json.Marshal(post)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not serialize post object",
+			})
+		}
+		postJSON = string(postJSONBytes)
+
+		err = rdb.Set(ctx, postKey, postJSON, 0).Err()
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not store post in Redis",
+			})
+		}
+	} else if err != nil {
+		// Redis error occurred
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve post from Redis",
+		})
+	} else {
+		// Post found in Redis cache
+		err := json.Unmarshal([]byte(postJSON), &post)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Could not deserialize post object",
+			})
+		}
+	}
 
 	return c.JSON(post)
 }

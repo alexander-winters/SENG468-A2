@@ -95,38 +95,43 @@ func CreateUser(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-// GetUser retrieves a user from the database by username
-func GetUser(c *fiber.Ctx) error {
+// GetUserByUsername retrieves a user by username, first checking Redis cache, then the database
+func GetUserByUsername(username string) (*models.User, error) {
 	// Get a handle to the users collection
 	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
-	// Get the username from the request parameters
-	username := c.Params("username")
-
 	// Check Redis cache for the user
 	ctx := context.Background()
-	userJSON, err := rdb.Get(ctx, username).Result()
+	userJSON, err := rdb.Get(ctx, "user:"+username).Result()
 
-	if err == nil {
+	if err == redis.Nil {
+		// User not found in Redis cache, query the database
+		var user models.User
+		err = usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+		if err != nil {
+			return nil, err
+		}
+		return &user, nil
+	} else if err != nil {
+		return nil, err
+	} else {
 		// User found in Redis cache
 		var user models.User
 		err := json.Unmarshal([]byte(userJSON), &user)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not deserialize user object",
-			})
+			return nil, err
 		}
-		return c.JSON(user)
-	} else if err != redis.Nil {
-		// Redis error occurred
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from Redis",
-		})
+		return &user, nil
 	}
+}
 
-	// User not found in Redis cache, query the database
-	var user models.User
-	err = usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+// GetUser retrieves a user from the database by username
+func GetUser(c *fiber.Ctx) error {
+	// Get the username from the request parameters
+	username := c.Params("username")
+
+	// Retrieve the user
+	user, err := GetUserByUsername(username)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -134,95 +139,41 @@ func GetUser(c *fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from database",
-		})
-	}
-
-	// Store the user in Redis cache
-	userJSONBytes, err := json.Marshal(user)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not serialize user object",
-		})
-	}
-	userJSON = string(userJSONBytes)
-
-	err = rdb.Set(ctx, user.Username, userJSON, 0).Err()
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not store user in Redis",
+			"error": "Could not retrieve user",
 		})
 	}
 
 	return c.JSON(user)
 }
 
-// UpdateUser updates a user in the database by username
-func UpdateUser(c *fiber.Ctx) error {
+// UpdateUser updates a user in the database and Redis cache by username
+func UpdateUser(ctx context.Context, user *models.User) error {
 	// Get a handle to the users collection
 	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
-
-	// Get the username from the URL params
-	username := c.Params("username")
-
-	// Parse the request body into a struct
-	var user models.User
-	if err := c.BodyParser(&user); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Could not parse request body",
-		})
-	}
 
 	// Set the updated time
 	user.UpdatedAt = time.Now()
 
-	// Check Redis cache
-	ctx := context.Background()
-	userJSON, err := rdb.Get(ctx, username).Result()
-	if err != nil && err != redis.Nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not get user from Redis",
-		})
+	// Update the user in the database
+	filter := bson.M{"username": user.Username}
+	update := bson.M{"$set": user}
+	_, err := usersCollection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
 	}
 
-	if err == redis.Nil { // User not in Redis cache, update in the database
-		filter := bson.M{"username": username}
-		update := bson.M{"$set": user}
-		_, err := usersCollection.UpdateOne(context.Background(), filter, update)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not update user in database",
-			})
-		}
-	} else { // User found in Redis cache, update and store it back
-		err = json.Unmarshal([]byte(userJSON), &user)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not deserialize user object",
-			})
-		}
-
-		// Update the user object
-		user.UpdatedAt = time.Now()
-
-		// Serialize the updated user object and store it back in Redis
-		userJSONBytes, err := json.Marshal(user)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not serialize user object",
-			})
-		}
-		userJSON = string(userJSONBytes)
-		err = rdb.Set(ctx, user.Username, userJSON, 0).Err()
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not store user in Redis",
-			})
-		}
+	// Serialize the updated user object and store it in Redis
+	userJSONBytes, err := json.Marshal(user)
+	if err != nil {
+		return err
+	}
+	userJSON := string(userJSONBytes)
+	err = rdb.Set(ctx, "user:"+user.Username, userJSON, 0).Err()
+	if err != nil {
+		return err
 	}
 
-	// Return the updated user
-	return c.JSON(user)
+	return nil
 }
 
 // DeleteUser deletes a user from the database by username

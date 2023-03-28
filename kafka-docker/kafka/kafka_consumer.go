@@ -9,7 +9,8 @@ import (
 	kafka "github.com/segmentio/kafka-go"
 )
 
-func createKafkaConsumer(brokerURL string) *kafka.Reader {
+// CreateKafkaConsumer creates a new Kafka consumer
+func CreateKafkaConsumer(brokerURL string) *kafka.Reader {
 	return kafka.NewReader(kafka.ReaderConfig{
 		Brokers:   []string{brokerURL},
 		Topic:     "notifications",
@@ -19,7 +20,7 @@ func createKafkaConsumer(brokerURL string) *kafka.Reader {
 	})
 }
 
-func processNotifications(consumer *kafka.Reader) {
+func ProcessNotifications(consumer *kafka.Reader) {
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		msg, err := consumer.ReadMessage(ctx)

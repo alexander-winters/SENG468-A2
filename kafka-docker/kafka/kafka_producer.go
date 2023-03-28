@@ -8,7 +8,8 @@ import (
 	kafka "github.com/segmentio/kafka-go"
 )
 
-func createKafkaProducer(brokerURL string) *kafka.Writer {
+// CreateKafkaProducer creates a new Kafka producer
+func CreateKafkaProducer(brokerURL string) *kafka.Writer {
 	return &kafka.Writer{
 		Addr:     kafka.TCP(brokerURL),
 		Topic:    "notifications",
@@ -16,7 +17,7 @@ func createKafkaProducer(brokerURL string) *kafka.Writer {
 	}
 }
 
-func sendNotification(producer *kafka.Writer, message string) {
+func SendNotification(producer *kafka.Writer, message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
