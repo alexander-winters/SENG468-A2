@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -269,68 +267,30 @@ func DeletePost(c *fiber.Ctx) error {
 	})
 }
 
+func GetUserPosts(ctx context.Context, username string) ([]models.Post, error) {
+	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
+	cursor, err := postsCollection.Find(ctx, bson.M{"username": username})
+	if err != nil {
+		return nil, err
+	}
+
+	var posts []models.Post
+	if err := cursor.All(ctx, &posts); err != nil {
+		return nil, err
+	}
+
+	return posts, nil
+}
+
 // ListUserPosts retrieves all posts of a single user from the database by username
 func ListUserPosts(c *fiber.Ctx) error {
-	// Get a handle to the posts and users collections
-	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
-	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
-
 	// Get the username from the URL parameters
 	username := c.Params("username")
 
-	// Find the user in the database by username
-	var user models.User
-	userChan := make(chan error)
-	go func() {
-		err := usersCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-		userChan <- err
-	}()
-
-	// Find all posts in the database for the specified user
-	cursor, err := postsCollection.Find(context.Background(), bson.M{"username": username})
+	posts, err := GetUserPosts(c.Context(), username)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not retrieve posts from database",
-		})
-	}
-
-	// Decode the cursor into a slice of posts
-	var posts []models.Post
-	postsChan := make(chan error)
-	go func() {
-		if err := cursor.All(context.Background(), &posts); err != nil {
-			postsChan <- err
-		}
-		postsChan <- nil
-	}()
-
-	// Check for any errors from the concurrent calls
-	var userErr, postsErr error
-	for i := 0; i < 2; i++ {
-		select {
-		case err := <-userChan:
-			if err != nil {
-				if err == mongo.ErrNoDocuments {
-					return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-						"error": "User not found",
-					})
-				}
-				userErr = err
-			}
-		case err := <-postsChan:
-			if err != nil {
-				postsErr = err
-			}
-		}
-	}
-	if userErr != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve user from database",
-		})
-	}
-	if postsErr != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not decode posts from cursor",
 		})
 	}
 
@@ -344,7 +304,7 @@ func ListAllPosts(c *fiber.Ctx) error {
 	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
 
 	// Find all posts in the database using a cursor
-	ctx := context.Background()
+	ctx := c.Context()
 	cursor, err := postsCollection.Find(ctx, bson.M{})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -352,37 +312,12 @@ func ListAllPosts(c *fiber.Ctx) error {
 		})
 	}
 
-	// Define a channel to receive the decoded posts
-	postChan := make(chan models.Post)
-	defer close(postChan)
-
-	// Define a wait group to wait for all goroutines to finish
-	var wg sync.WaitGroup
-
-	// Iterate over the cursor and decode each post into a channel
-	for cursor.Next(ctx) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			var post models.Post
-			if err := cursor.Decode(&post); err != nil {
-				log.Printf("Error decoding post: %s", err)
-				return
-			}
-			postChan <- post
-		}()
-	}
-
-	// Wait for all goroutines to finish decoding posts
-	go func() {
-		wg.Wait()
-		close(postChan)
-	}()
-
-	// Collect all decoded posts into a slice
+	// Decode the cursor into a slice of posts
 	var posts []models.Post
-	for post := range postChan {
-		posts = append(posts, post)
+	if err := cursor.All(ctx, &posts); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not decode posts from cursor",
+		})
 	}
 
 	// Check for errors during iteration
