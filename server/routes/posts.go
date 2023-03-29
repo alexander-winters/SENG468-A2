@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 
+	"github.com/alexander-winters/SENG468-A2/kafka-docker/kafkaService"
 	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
 )
@@ -55,7 +58,7 @@ func CreatePost(c *fiber.Ctx) error {
 	post.UpdatedAt = now
 
 	// Insert the post into the database
-	_, err = postsCollection.InsertOne(c.Context(), post)
+	res, err := postsCollection.InsertOne(c.Context(), post)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not insert post into database",
@@ -88,6 +91,45 @@ func CreatePost(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not store user in Redis",
 		})
+	}
+
+	// Set the ID of the comment and return it
+	post.ID = res.InsertedID.(primitive.ObjectID)
+
+	// Get the friends of the user who created the post
+	friends, err := GetUserFriends(username)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve user friends",
+		})
+	}
+
+	// Iterate through the friends and send notifications
+	for _, friend := range friends {
+		// Create a Notification
+		notification := models.Notification{
+			UserID:     post.UserID,
+			Username:   username,
+			Type:       models.PostCreatedNotification,
+			PostID:     post.ID,
+			Recipient:  friend,
+			Content:    post.Content,
+			ReadStatus: false,
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
+		}
+
+		// Initialize Kafka producer and consumer
+		kafkaProducer := kafkaService.CreateKafkaProducer(kafkaBrokerURL)
+		kafkaConsumer := kafkaService.CreateKafkaConsumer(kafkaBrokerURL, "comment")
+
+		ks := kafkaService.NewKafkaService(kafkaProducer, kafkaConsumer)
+
+		// Send a notification to the post owner
+		err = ks.SendUserNotification(notification)
+		if err != nil {
+			log.Printf("Could not send notification: %v", err)
+		}
 	}
 
 	// Return the created post

@@ -370,3 +370,16 @@ func ListUsers(c *fiber.Ctx) error {
 	// Return the users
 	return c.JSON(users)
 }
+
+func GetUserFriends(username string) ([]string, error) {
+	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
+
+	filter := bson.M{"username": username}
+	var user models.User
+	err := usersCollection.FindOne(context.Background(), filter).Decode(&user)
+	if err != nil {
+		return nil, err
+	}
+
+	return user.ListOfFriends, nil
+}
