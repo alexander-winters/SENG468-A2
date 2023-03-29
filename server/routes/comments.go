@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -13,9 +14,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 
+	"github.com/alexander-winters/SENG468-A2/kafka-docker/kafkaService"
 	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
 )
+
+var kafkaBrokerURL = "kafka:9092"
 
 // CreateComment inserts a new comment into the database for a specific post
 func CreateComment(c *fiber.Ctx) error {
@@ -91,6 +95,32 @@ func CreateComment(c *fiber.Ctx) error {
 
 	// Set the ID of the comment and return it
 	comment.ID = res.InsertedID.(primitive.ObjectID)
+
+	// Create a Notification
+	notification := models.Notification{
+		UserID:     comment.UserID,
+		Username:   username,
+		Type:       models.CommentCreatedNotification,
+		PostID:     comment.PostID,
+		CommentID:  comment.ID,
+		Recipient:  post.Username,
+		Content:    comment.Content,
+		ReadStatus: false,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+
+	// Initialize Kafka producer and consumer
+	kafkaProducer := kafkaService.CreateKafkaProducer(kafkaBrokerURL)
+	kafkaConsumer := kafkaService.CreateKafkaConsumer(kafkaBrokerURL, "comment")
+
+	ks := kafkaService.NewKafkaService(kafkaProducer, kafkaConsumer)
+
+	// Send a notification to the post owner
+	err = ks.SendUserNotification(notification)
+	if err != nil {
+		log.Printf("Could not send notification: %v", err)
+	}
 	return c.JSON(comment)
 }
 

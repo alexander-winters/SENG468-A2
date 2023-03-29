@@ -6,7 +6,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/alexander-winters/SENG468-A2/kafka-docker/kafka"
 	"github.com/alexander-winters/SENG468-A2/server/routes"
 )
 
@@ -53,11 +52,6 @@ func main() {
 	app.Get("/reports/user/posts", routes.PostReport)
 	app.Get("/reports/user/comments", routes.UserCommentReport)
 	app.Get("/reports/user/likes", routes.LikeReport)
-
-	// Initialize Kafka producer and consumer
-	kafkaBrokerURL := "kafka:9092"
-	kafkaProducer := kafka.CreateKafkaProducer(kafkaBrokerURL)
-	kafkaConsumer := kafka.CreateKafkaConsumer(kafkaBrokerURL)
 
 	// Start the server on the specified port
 	port := os.Getenv("PORT")
