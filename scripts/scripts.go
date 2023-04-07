@@ -10,6 +10,7 @@ import (
 	"github.com/alexander-winters/SENG468-A2/scripts/commentScripts"
 	"github.com/alexander-winters/SENG468-A2/scripts/dbScripts"
 	"github.com/alexander-winters/SENG468-A2/scripts/postScripts"
+	"github.com/alexander-winters/SENG468-A2/scripts/reportScripts"
 	"github.com/alexander-winters/SENG468-A2/scripts/userScripts"
 )
 
@@ -18,7 +19,8 @@ func main() {
 	createUsers := flag.Int("c", 0, "Number of users to create")
 	deleteData := flag.Bool("d", false, "Delete all data (requires confirmation)")
 	confirmDelete := flag.Bool("y", false, "Skip confirmation prompt when using -d")
-	addFriends := flag.Bool("af", false, "Add random friends to users")
+	addFriends := flag.Bool("af", true, "Add random friends to users")
+	userReports := flag.String("r", "", "Download user reports for specified username")
 	help := flag.Bool("h", false, "Display help information")
 	helpLong := flag.Bool("help", false, "Display help information")
 
@@ -69,6 +71,13 @@ func main() {
 	commentScripts.CreateCommentsForUsers(7) // Change the number to the desired number of comments per post
 	filename = "comments.txt"
 	commentScripts.DownloadCommentsToFile(filename)
+
+	if *userReports != "" {
+		// Get user reports
+		username := *userReports
+		fmt.Println("Getting user reports")
+		reportScripts.DownloadReports(username)
+	}
 }
 
 func promptForConfirmation() bool {
