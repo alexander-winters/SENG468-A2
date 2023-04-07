@@ -42,6 +42,7 @@ func main() {
 	app.Put("/comments/:id", routes.UpdateComment)
 	app.Delete("/comments/:id", routes.DeleteComment)
 	app.Get("/posts/:post_number/comments", routes.ListComments)
+	app.Put("/user/:username/post/:postNumber/like", routes.LikePost)
 
 	// Set up the routes for reports
 	app.Get("/reports/user/posts", routes.PostReport)

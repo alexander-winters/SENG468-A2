@@ -221,15 +221,15 @@ func UpdatePost(c *fiber.Ctx) error {
 	}
 
 	// Parse the request body into a struct
-	var updatedPost models.Post
-	if err := c.BodyParser(&updatedPost); err != nil {
+	var post models.Post
+	if err := c.BodyParser(&post); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Could not parse request body",
 		})
 	}
 
 	// Set the updated time
-	updatedPost.UpdatedAt = time.Now()
+	post.UpdatedAt = time.Now()
 
 	// Get a handle to the posts collection
 	postsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
@@ -247,52 +247,9 @@ func UpdatePost(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check if the user has already liked the post
-	liked := false
-	for _, like := range existingPost.Likes {
-		if like.Username == c.Locals("username").(string) {
-			liked = true
-			break
-		}
-	}
-
-	// Add the like and increment the likes count if the user has not already liked the post
-	if !liked {
-		like := models.Like{
-			Username: c.Locals("username").(string),
-			LikedAt:  time.Now(),
-		}
-		updatedPost.Likes = append(existingPost.Likes, like)
-		updatedPost.NumberOfLikes = existingPost.NumberOfLikes + 1
-	}
-	// Create a Notification
-	notification := models.Notification{
-		UserID:     updatedPost.UserID,
-		Username:   username,
-		Type:       models.PostCreatedNotification,
-		PostID:     updatedPost.ID,
-		Recipient:  updatedPost.Username,
-		Content:    updatedPost.Content,
-		ReadStatus: false,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
-	}
-
-	// Initialize Kafka producer and consumer
-	kafkaProducer := kafkaService.CreateKafkaProducer(kafkaBrokerURL)
-	kafkaConsumer := kafkaService.CreateKafkaConsumer(kafkaBrokerURL, "like")
-
-	ks := kafkaService.NewKafkaService(kafkaProducer, kafkaConsumer)
-
-	// Send a notification to the post owner
-	err = ks.SendUserNotification(notification)
-	if err != nil {
-		log.Printf("Could not send notification: %v", err)
-	}
-
 	// Update the post in the database
 	filter := bson.M{"username": username, "post_number": postNumber}
-	update := bson.M{"$set": bson.M{"content": updatedPost.Content, "updated_at": updatedPost.UpdatedAt, "likes": updatedPost.Likes, "likes_count": updatedPost.NumberOfLikes}}
+	update := bson.M{"$set": bson.M{"content": existingPost.Content, "updated_at": existingPost.UpdatedAt, "likes": existingPost.Likes, "likes_count": existingPost.NumberOfLikes}}
 	_, err = postsCollection.UpdateOne(c.Context(), filter, update)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -302,7 +259,7 @@ func UpdatePost(c *fiber.Ctx) error {
 
 	// Update the post in Redis cache
 	postKey := fmt.Sprintf("post:%s:%d", username, postNumber)
-	postJSONBytes, err := json.Marshal(updatedPost)
+	postJSONBytes, err := json.Marshal(existingPost)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not serialize post object",
@@ -318,7 +275,7 @@ func UpdatePost(c *fiber.Ctx) error {
 	}
 
 	// Return the updated post
-	return c.JSON(updatedPost)
+	return c.JSON(existingPost)
 }
 
 // DeletePost deletes a post from the database by username and post number
@@ -445,4 +402,104 @@ func ListAllPosts(c *fiber.Ctx) error {
 
 	// Return the posts
 	return c.JSON(posts)
+}
+
+func LikePost(c *fiber.Ctx) error {
+	// Get the username and post number from the request parameters
+	username := c.Params("username")
+	postNumber, err := strconv.Atoi(c.Params("postNumber"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post number",
+		})
+	}
+
+	// Get a handle to the posts collection
+	postsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
+
+	// Retrieve the existing post
+	existingPost, err := GetPostByUsername(username, postNumber)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Post not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve post",
+		})
+	}
+
+	// Check if the user has already liked the post
+	liked := false
+	for _, like := range existingPost.Likes {
+		if like.Username == c.Locals("username").(string) {
+			liked = true
+			break
+		}
+	}
+
+	// Add the like and increment the likes count if the user has not already liked the post
+	if !liked {
+		like := models.Like{
+			Username: c.Locals("username").(string),
+			LikedAt:  time.Now(),
+		}
+		existingPost.Likes = append(existingPost.Likes, like)
+		existingPost.NumberOfLikes = existingPost.NumberOfLikes + 1
+	}
+	// Create a Notification
+	notification := models.Notification{
+		UserID:     existingPost.UserID,
+		Username:   username,
+		Type:       models.PostCreatedNotification,
+		PostID:     existingPost.ID,
+		Recipient:  existingPost.Username,
+		Content:    existingPost.Content,
+		ReadStatus: false,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+
+	// Initialize Kafka producer and consumer
+	kafkaProducer := kafkaService.CreateKafkaProducer(kafkaBrokerURL)
+	kafkaConsumer := kafkaService.CreateKafkaConsumer(kafkaBrokerURL, "like")
+
+	ks := kafkaService.NewKafkaService(kafkaProducer, kafkaConsumer)
+
+	// Send a notification to the post owner
+	err = ks.SendUserNotification(notification)
+	if err != nil {
+		log.Printf("Could not send notification: %v", err)
+	}
+
+	// Update the post in the database
+	filter := bson.M{"username": username, "post_number": postNumber}
+	update := bson.M{"$set": bson.M{"likes": existingPost.Likes, "likes_count": existingPost.NumberOfLikes}}
+	_, err = postsCollection.UpdateOne(c.Context(), filter, update)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not update post in database",
+		})
+	}
+
+	// Update the post in Redis cache
+	postKey := fmt.Sprintf("post:%s:%d", username, postNumber)
+	postJSONBytes, err := json.Marshal(existingPost)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not serialize post object",
+		})
+	}
+	postJSON := string(postJSONBytes)
+
+	err = rdb.Set(c.Context(), postKey, postJSON, 0).Err()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not store post in Redis",
+		})
+	}
+
+	// Return the updated post
+	return c.JSON(existingPost)
 }
