@@ -49,7 +49,7 @@ func CreateRandomUsers(createUsers int) {
 			continue
 		}
 
-		resp, err := http.Post("http://localhost:3000/users", "application/json", bytes.NewBuffer(userJSON))
+		resp, err := http.Post("http://localhost:3000/user", "application/json", bytes.NewBuffer(userJSON))
 		if err != nil {
 			fmt.Println("Error creating user:", err)
 			continue

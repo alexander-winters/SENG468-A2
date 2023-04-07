@@ -7,7 +7,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/alexander-winters/SENG468-A2/scripts/commentScripts"
 	"github.com/alexander-winters/SENG468-A2/scripts/dbScripts"
+	"github.com/alexander-winters/SENG468-A2/scripts/postScripts"
 	"github.com/alexander-winters/SENG468-A2/scripts/userScripts"
 )
 
@@ -16,7 +18,6 @@ func main() {
 	createUsers := flag.Int("c", 0, "Number of users to create")
 	deleteData := flag.Bool("d", false, "Delete all data (requires confirmation)")
 	confirmDelete := flag.Bool("y", false, "Skip confirmation prompt when using -d")
-	downloadUsers := flag.String("dl", "", "Download the users.txt file, optionally specify a filename")
 	addFriends := flag.Bool("af", false, "Add random friends to users")
 	help := flag.Bool("h", false, "Display help information")
 	helpLong := flag.Bool("help", false, "Display help information")
@@ -28,6 +29,11 @@ func main() {
 		displayHelp()
 		return
 	}
+
+	// Download users
+	filename := "users.txt"
+	fmt.Println("Downloading users...")
+	userScripts.DownloadUsersToFile(filename)
 
 	// Create users if the flag is set
 	if *createUsers > 0 {
@@ -46,21 +52,23 @@ func main() {
 		}
 	}
 
-	if *downloadUsers != "" {
-		filename := "users.txt"
-		if len(strings.TrimSpace(*downloadUsers)) > 0 {
-			filename = *downloadUsers
-		}
-		// Download users
-		fmt.Println("Downloading users...")
-		userScripts.DownloadUsersToFile(filename)
-	}
-
 	if *addFriends {
 		// Add random friends
 		fmt.Println("Adding random friends...")
 		userScripts.AddRandomFriends()
 	}
+
+	// Create posts
+	fmt.Println("Creating posts...")
+	postScripts.CreatePostsForUsers(10) // Change the number to the desired number of posts per user
+	filename = "posts.txt"
+	postScripts.DownloadPostsToFile(filename)
+
+	// Create comments
+	fmt.Println("Creating comments...")
+	commentScripts.CreateCommentsForUsers(7) // Change the number to the desired number of comments per post
+	filename = "comments.txt"
+	commentScripts.DownloadCommentsToFile(filename)
 }
 
 func promptForConfirmation() bool {
@@ -82,7 +90,6 @@ func displayHelp() {
 	fmt.Println("  -c N      Create N random users")
 	fmt.Println("  -d        Delete all data (requires confirmation)")
 	fmt.Println("  -y        Skip confirmation prompt when using -d")
-	fmt.Println("  -dl [file] Download the users.txt file, optionally specify a filename")
 	fmt.Println("  -af       Add random friends to users")
 	fmt.Println("  -h, -help Display help information")
 }
