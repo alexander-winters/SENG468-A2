@@ -25,7 +25,6 @@ func CreatePostsForUsers(numPosts int) {
 	for _, username := range usernames {
 		for i := 0; i < numPosts; i++ {
 			createRandomPost(username)
-			time.Sleep(50 * time.Millisecond) // Add a short delay to avoid overwhelming the server
 		}
 	}
 }

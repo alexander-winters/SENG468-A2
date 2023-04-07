@@ -25,7 +25,6 @@ func CreateCommentsForUsers(numComments int) {
 	for _, userPostInfo := range userPostInfos {
 		for i := 0; i < numComments; i++ {
 			createRandomComment(userPostInfo.Username, userPostInfo.PostNumber)
-			time.Sleep(50 * time.Millisecond) // Add a short delay to avoid overwhelming the server
 		}
 	}
 }

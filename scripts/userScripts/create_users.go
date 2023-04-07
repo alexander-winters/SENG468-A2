@@ -62,6 +62,5 @@ func CreateRandomUsers(createUsers int) {
 		} else {
 			fmt.Printf("User %d created successfully\n", i+1)
 		}
-		time.Sleep(50 * time.Millisecond) // Add a short delay to avoid overwhelming the server
 	}
 }
