@@ -38,8 +38,8 @@ func main() {
 
 	// Set up the routes for comments
 	app.Post("user/:username/post/:post_number/comment", routes.CreateComment)
-	app.Get("/user/:username/posts/:post_number/comment", routes.GetComment)
-	app.Put("/comments/:id", routes.UpdateComment)
+	app.Get("/user/:username/post/:post_number/comment", routes.GetComment)
+	app.Put("user/:username/post/:post_number/comment", routes.UpdateComment)
 	app.Delete("/comments/:id", routes.DeleteComment)
 	app.Get("/posts/:post_number/comments", routes.ListComments)
 	app.Put("/user/:username/post/:postNumber/like", routes.LikePost)

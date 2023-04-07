@@ -197,7 +197,7 @@ func GetComment(c *fiber.Ctx) error {
 	return c.JSON(comment)
 }
 
-// UpdateComment updates a comment in the database by ID
+// UpdateComment updates a comment in the database by username and post number
 func UpdateComment(c *fiber.Ctx) error {
 	// Get the username and post number from the request parameters
 	username := c.Params("username")
@@ -260,52 +260,62 @@ func UpdateComment(c *fiber.Ctx) error {
 	return c.JSON(updatedComment)
 }
 
-// DeleteComment deletes a comment from the database by ID
+// DeleteComment deletes a comment from the database by username and post number
 func DeleteComment(c *fiber.Ctx) error {
-	// Get a handle to the comments collection
-	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
+	// Get the username and post number from the request parameters
+	username := c.Params("username")
+	postNumber, err := strconv.Atoi(c.Params("postNumber"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post number",
+		})
+	}
 
-	// Get the ID from the URL parameters
-	commentID := c.Params("ID")
-
-	// Convert the comment ID to a MongoDB ObjectID
-	objID, err := primitive.ObjectIDFromHex(commentID)
+	// Retrieve the post
+	post, err := GetPostByUsername(username, postNumber)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid comment ID",
 		})
 	}
 
-	// Create channels for error handling and synchronization
-	errChan := make(chan error)
-	done := make(chan bool)
+	// Get a handle to the comments collection
+	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
 
-	ctx := context.Background()
+	// Get the comment ID from the request body
+	var commentToDelete models.Comment
+	if err := c.BodyParser(&commentToDelete); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Could not parse request body",
+		})
+	}
 
-	// Concurrently delete the comment from the database
-	go func() {
-		res, err := commentsCollection.DeleteOne(ctx, bson.M{"_id": objID})
-		if err != nil {
-			errChan <- err
-		} else if res.DeletedCount == 0 {
-			errChan <- mongo.ErrNoDocuments
-		} else {
-			done <- true
+	// Find the comment with the given ID
+	var existingComment *models.Comment
+	for _, c := range post.Comments {
+		if c.ID == commentToDelete.ID {
+			existingComment = &c
+			break
 		}
-	}()
+	}
 
-	// Wait for the comment to be deleted and handle any errors
-	select {
-	case err = <-errChan:
-		if err == mongo.ErrNoDocuments {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Comment not found",
-			})
-		}
+	// Check if the comment was found
+	if existingComment == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Comment not found",
+		})
+	}
+
+	// Delete the comment from the database
+	res, err := commentsCollection.DeleteOne(c.Context(), bson.M{"_id": existingComment.ID})
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not delete comment from database",
 		})
-	case <-done:
+	} else if res.DeletedCount == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Comment not found",
+		})
 	}
 
 	return c.JSON(fiber.Map{
