@@ -35,14 +35,15 @@ func main() {
 	app.Delete("/user/:username/post/:post_number", routes.DeletePost)
 	app.Get("/users/:username/posts", routes.ListUserPosts)
 	app.Get("/posts", routes.ListAllPosts)
+	app.Put("/user/:username/post/:post_number/like", routes.LikePost)
 
 	// Set up the routes for comments
 	app.Post("user/:username/post/:post_number/comment", routes.CreateComment)
 	app.Get("/user/:username/post/:post_number/comment", routes.GetComment)
 	app.Put("user/:username/post/:post_number/comment", routes.UpdateComment)
-	app.Delete("/comments/:id", routes.DeleteComment)
-	app.Get("/posts/:post_number/comments", routes.ListComments)
-	app.Put("/user/:username/post/:postNumber/like", routes.LikePost)
+	app.Delete("user/:username/post/:post_number/comment", routes.DeleteComment)
+	app.Get("/post/:post_number/comments", routes.ListComments)
+	app.Put("/user/:username/post/:post_number/comment/like", routes.LikeComment)
 
 	// Set up the routes for reports
 	app.Get("/reports/user/posts", routes.PostReport)

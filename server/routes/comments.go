@@ -3,7 +3,6 @@ package routes
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"strconv"
 	"time"
@@ -131,11 +130,8 @@ func GetComment(c *fiber.Ctx) error {
 	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
 
 	// Get the post number and username from the request parameters
-	postNum := c.Params("post_number")
 	username := c.Params("username")
-
-	// Convert the post number to an integer
-	postInt, err := strconv.Atoi(postNum)
+	postNum, err := strconv.Atoi(c.Params("post_number"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid post number",
@@ -151,9 +147,9 @@ func GetComment(c *fiber.Ctx) error {
 
 	// Concurrently find the post in the Redis cache or the database by post number and username
 	go func() {
-		cacheKey := "post:" + username + ":" + strconv.Itoa(postInt)
+		cacheKey := "post:" + username + ":" + strconv.Itoa(postNum)
 		if err := rdb.Get(ctx, cacheKey).Scan(&post); err == redis.Nil {
-			err = postsCollection.FindOne(ctx, bson.M{"postNum": postInt, "username": username}).Decode(&post)
+			err = postsCollection.FindOne(ctx, bson.M{"postNum": postNum, "username": username}).Decode(&post)
 			if err == nil {
 				postJSON, _ := json.Marshal(post)
 				rdb.Set(ctx, cacheKey, postJSON, 0)
@@ -323,58 +319,37 @@ func DeleteComment(c *fiber.Ctx) error {
 	})
 }
 
-// ListComments retrieves all comments for a post by post number
+// ListComments retrieves all comments for a post by username and post number
 func ListComments(c *fiber.Ctx) error {
-	// Get a handle to the comments collection
-	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
-
-	// Get the post number from the request parameters
-	postNum := c.Params("post_number")
-
-	// Convert the post number to an integer
-	postInt, err := strconv.Atoi(postNum)
+	// Get the username and post number from the request parameters
+	username := c.Params("username")
+	postNumber, err := strconv.Atoi(c.Params("postNumber"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid post number",
 		})
 	}
 
-	// Create channels for error handling and synchronization
-	errChan := make(chan error)
-	commentsChan := make(chan []models.Comment)
-
-	ctx := context.Background()
-
-	// Concurrently find all comments for the post in the database
-	go func() {
-		cursor, err := commentsCollection.Find(ctx, bson.M{"postNum": postInt})
-		if err != nil {
-			errChan <- err
-			return
-		}
-
-		// Decode the cursor into a slice of comments
-		var comments []models.Comment
-		if err := cursor.All(ctx, &comments); err != nil {
-			errChan <- err
-			return
-		}
-
-		commentsChan <- comments
-	}()
-
-	// Wait for the comments to be retrieved and handle any errors
-	var comments []models.Comment
-	select {
-	case err := <-errChan:
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Could not process request: %v", err),
+	// Retrieve the post
+	post, err := GetPostByUsername(username, postNumber)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post number",
 		})
-	case comments = <-commentsChan:
 	}
 
-	// Return the comments
-	return c.JSON(comments)
+	// Return the comments of the post
+	return c.JSON(post.Comments)
+}
+
+func GetCommentByUsername(username string, postNumber int) (*models.Comment, error) {
+	commentsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+	var comment models.Comment
+	err := commentsCollection.FindOne(context.Background(), bson.M{"username": username, "post_number": postNumber}).Decode(&comment)
+	if err != nil {
+		return nil, err
+	}
+	return &comment, nil
 }
 
 func LikeComment(c *fiber.Ctx) error {
@@ -390,20 +365,20 @@ func LikeComment(c *fiber.Ctx) error {
 	// Get a handle to the comments collection
 	commentsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
 
-	// Retrieve the existing post
-	existingComment, err := GetPostByUsername(username, postNumber)
+	// Retrieve the existing comment
+	existingComment, err := GetCommentByUsername(username, postNumber)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Post not found",
+				"error": "Comment not found",
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not retrieve post",
+			"error": "Could not retrieve comment",
 		})
 	}
 
-	// Check if the user has already liked the post
+	// Check if the user has already liked the comment
 	liked := false
 	for _, like := range existingComment.Likes {
 		if like.Username == c.Locals("username").(string) {
@@ -412,7 +387,7 @@ func LikeComment(c *fiber.Ctx) error {
 		}
 	}
 
-	// Add the like and increment the likes count if the user has not already liked the post
+	// Add the like and increment the likes count if the user has not already liked the comment
 	if !liked {
 		like := models.Like{
 			Username: c.Locals("username").(string),
@@ -453,23 +428,6 @@ func LikeComment(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Could not update post in database",
-		})
-	}
-
-	// Update the post in Redis cache
-	postKey := fmt.Sprintf("post:%s:%d", username, postNumber)
-	postJSONBytes, err := json.Marshal(existingComment)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not serialize post object",
-		})
-	}
-	postJSON := string(postJSONBytes)
-
-	err = rdb.Set(c.Context(), postKey, postJSON, 0).Err()
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Could not store post in Redis",
 		})
 	}
 
