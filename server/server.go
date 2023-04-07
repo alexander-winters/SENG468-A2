@@ -43,11 +43,6 @@ func main() {
 	app.Delete("/comments/:id", routes.DeleteComment)
 	app.Get("/posts/:post_number/comments", routes.ListComments)
 
-	// Set up the routes for notifications
-	app.Post("/notifications", routes.CreateNotification)
-	app.Put("/notifications/:id", routes.MarkNotificationAsRead)
-	app.Get("/notifications/:username", routes.ListNotifications)
-
 	// Set up the routes for reports
 	app.Get("/reports/user/posts", routes.PostReport)
 	app.Get("/reports/user/comments", routes.UserCommentReport)

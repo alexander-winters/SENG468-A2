@@ -234,9 +234,65 @@ func UpdatePost(c *fiber.Ctx) error {
 	// Get a handle to the posts collection
 	postsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("posts")
 
+	// Retrieve the existing post
+	existingPost, err := GetPostByUsername(username, postNumber)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Post not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve post",
+		})
+	}
+
+	// Check if the user has already liked the post
+	liked := false
+	for _, like := range existingPost.Likes {
+		if like.Username == c.Locals("username").(string) {
+			liked = true
+			break
+		}
+	}
+
+	// Add the like and increment the likes count if the user has not already liked the post
+	if !liked {
+		like := models.Like{
+			Username: c.Locals("username").(string),
+			LikedAt:  time.Now(),
+		}
+		updatedPost.Likes = append(existingPost.Likes, like)
+		updatedPost.NumberOfLikes = existingPost.NumberOfLikes + 1
+	}
+	// Create a Notification
+	notification := models.Notification{
+		UserID:     updatedPost.UserID,
+		Username:   username,
+		Type:       models.PostCreatedNotification,
+		PostID:     updatedPost.ID,
+		Recipient:  updatedPost.Username,
+		Content:    updatedPost.Content,
+		ReadStatus: false,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+
+	// Initialize Kafka producer and consumer
+	kafkaProducer := kafkaService.CreateKafkaProducer(kafkaBrokerURL)
+	kafkaConsumer := kafkaService.CreateKafkaConsumer(kafkaBrokerURL, "like")
+
+	ks := kafkaService.NewKafkaService(kafkaProducer, kafkaConsumer)
+
+	// Send a notification to the post owner
+	err = ks.SendUserNotification(notification)
+	if err != nil {
+		log.Printf("Could not send notification: %v", err)
+	}
+
 	// Update the post in the database
 	filter := bson.M{"username": username, "post_number": postNumber}
-	update := bson.M{"$set": updatedPost}
+	update := bson.M{"$set": bson.M{"content": updatedPost.Content, "updated_at": updatedPost.UpdatedAt, "likes": updatedPost.Likes, "likes_count": updatedPost.NumberOfLikes}}
 	_, err = postsCollection.UpdateOne(c.Context(), filter, update)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

@@ -31,9 +31,10 @@ type Post struct {
 	Content          string             `bson:"content" json:"content"`
 	CreatedAt        time.Time          `bson:"created_at" json:"created_at,omitempty"`
 	UpdatedAt        time.Time          `bson:"updated_at" json:"updated_at,omitempty"`
-	Comments         []Comment          `bson:"comments" json:"comments"`
 	NumberOfLikes    int                `bson:"number_of_likes" json:"number_of_likes"`
+	Likes            []Like             `bson:"likes" json:"likes"`
 	NumberOfComments int                `bson:"number_of_comments" json:"number_of_comments"`
+	Comments         []Comment          `bson:"comments" json:"comments"`
 }
 
 // Comment represents a comment in the database
@@ -47,6 +48,7 @@ type Comment struct {
 	CreatedAt     time.Time          `bson:"created_at" json:"created_at,omitempty"`
 	UpdatedAt     time.Time          `bson:"updated_at" json:"updated_at,omitempty"`
 	NumberOfLikes int                `bson:"number_of_likes" json:"number_of_likes"`
+	Likes         []Like             `bson:"likes" json:"likes"`
 }
 
 type NotificationType string
@@ -71,6 +73,12 @@ type Notification struct {
 	ReadStatus bool               `bson:"read_status" json:"read_status"`
 	CreatedAt  time.Time          `bson:"created_at" json:"created_at,omitempty"`
 	UpdatedAt  time.Time          `bson:"updated_at" json:"updated_at,omitempty"`
+}
+
+type Like struct {
+	ID       primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	Username string             `bson:"username" json:"username"`
+	LikedAt  time.Time          `bson:"liked_at" json:"liked_at"`
 }
 
 // PostReport represents a report of the number of posts created by each user
