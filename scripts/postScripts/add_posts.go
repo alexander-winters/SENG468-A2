@@ -55,6 +55,8 @@ func readUsernamesFromFile(filename string) ([]string, error) {
 }
 
 func createRandomPost(username string) {
+	src := rand.NewSource(time.Now().UnixNano())
+	rand.New(src)
 	post := &models.Post{
 		Username:  username,
 		Content:   randomString(10),

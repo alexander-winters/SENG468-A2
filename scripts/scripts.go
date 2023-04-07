@@ -9,6 +9,7 @@ import (
 
 	"github.com/alexander-winters/SENG468-A2/scripts/commentScripts"
 	"github.com/alexander-winters/SENG468-A2/scripts/dbScripts"
+	"github.com/alexander-winters/SENG468-A2/scripts/likeScripts"
 	"github.com/alexander-winters/SENG468-A2/scripts/postScripts"
 	"github.com/alexander-winters/SENG468-A2/scripts/reportScripts"
 	"github.com/alexander-winters/SENG468-A2/scripts/userScripts"
@@ -23,6 +24,7 @@ func main() {
 	confirmDelete := flag.Bool("y", false, "Skip confirmation prompt when using -d")
 	addFriends := flag.Bool("af", false, "Add random friends to users")
 	userReports := flag.String("r", "", "Download user reports for specified username")
+	generateLikes := flag.Bool("g", false, "Randomly like posts and comments")
 	help := flag.Bool("h", false, "Display help information")
 	helpLong := flag.Bool("help", false, "Display help information")
 
@@ -86,6 +88,14 @@ func main() {
 		fmt.Println("Getting user reports")
 		reportScripts.DownloadReports(username)
 	}
+
+	if *generateLikes {
+		// Generate random likes on posts and comments
+		first_file := "posts.txt"
+		fmt.Println("Generating likes from both files...")
+		second_file := "comments.txt"
+		likeScripts.LikePostsAndComments(first_file, second_file)
+	}
 }
 
 func promptForConfirmation() bool {
@@ -111,5 +121,6 @@ func displayHelp() {
 	fmt.Println("  -y            Skip confirmation prompt when using -d")
 	fmt.Println("  -af           Add random friends to users")
 	fmt.Println("  -r <username> Get reports for specified username")
+	fmt.Println("  -g            Generate likes for posts and comments randomly")
 	fmt.Println("  -h, -help     Display help information")
 }

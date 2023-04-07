@@ -103,6 +103,11 @@ func PostReport(c *fiber.Ctx) error {
 			"error": fmt.Sprintf("Could not generate report: %v", err),
 		})
 	case results := <-resultsChan:
+		// If there are no results, create an empty PostReport
+		if len(results) == 0 {
+			results = append(results, models.PostReport{UserID: userID, Username: username, Count: 0})
+		}
+
 		// Return the report
 		return c.JSON(results)
 	}
@@ -146,10 +151,10 @@ func UserCommentReport(c *fiber.Ctx) error {
 		userID = user.ID
 	}
 
-	// Create channels for comment cursor and total comments count
-	totalCommentsChan := make(chan int, 1)
+	// Create channels for comment cursor and comment results
+	commentsChan := make(chan []models.Comment, 1)
 
-	// Concurrently find all comments created by the user and calculate the total number of comments
+	// Concurrently find all comments created by the user and store them in a slice
 	go func() {
 		cursor, err := commentsCollection.Find(ctx, bson.M{"user_id": userID})
 		if err != nil {
@@ -157,32 +162,35 @@ func UserCommentReport(c *fiber.Ctx) error {
 			return
 		}
 
-		totalComments := 0
+		var comments []models.Comment
 		for cursor.Next(ctx) {
-			totalComments++
+			var comment models.Comment
+			if err := cursor.Decode(&comment); err != nil {
+				errChan <- err
+				return
+			}
+			comments = append(comments, comment)
 		}
 
-		totalCommentsChan <- totalComments
+		commentsChan <- comments
 	}()
 
 	// Wait for the concurrent task to finish and handle any errors
-	var totalComments int
+	var comments []models.Comment
 	select {
 	case err := <-errChan:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Could not retrieve comments from database: %v", err),
 		})
-	case totalComments = <-totalCommentsChan:
+	case comments = <-commentsChan:
 	}
 
-	// Create the comment reports object
-	commentReports := models.CommentReport{
-		UserID:        userID,
-		Username:      username,
-		TotalComments: totalComments,
-	}
-
-	return c.JSON(commentReports)
+	// Return the JSON output directly
+	return c.JSON(fiber.Map{
+		"username":       username,
+		"total_comments": len(comments),
+		"comments":       comments,
+	})
 }
 
 // LikeReport retrieves a report on likes given or received by a user
@@ -230,7 +238,7 @@ func LikeReport(c *fiber.Ctx) error {
 			"_id":         "$user_id",
 			"likes_given": bson.M{"$sum": 1},
 			"likes_received": bson.M{"$sum": bson.M{"$cond": bson.A{
-				bson.M{"$eq": bson.A{"$liked_by", userID}},
+				bson.M{"$eq": bson.A{"$liked_by_id", userID}},
 				1,
 				0,
 			}}},
@@ -265,6 +273,10 @@ func LikeReport(c *fiber.Ctx) error {
 			"error": fmt.Sprintf("Could not retrieve likes from database: %v", err),
 		})
 	case reports = <-reportsChan:
+		// If there are no results, create an empty LikeReport
+		if len(reports) == 0 {
+			reports = append(reports, models.LikeReport{UserID: userID, Username: username, LikesGiven: 0, LikesReceived: 0})
+		}
 	}
 
 	// Return the reports

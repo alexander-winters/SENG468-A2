@@ -66,6 +66,8 @@ func readUserPostInfoFromFile(filename string) ([]UserPostInfo, error) {
 }
 
 func createRandomComment(username string, postNumber int) {
+	src := rand.NewSource(time.Now().UnixNano())
+	rand.New(src)
 	comment := &models.Comment{
 		Username:  username,
 		Content:   randomString(10),

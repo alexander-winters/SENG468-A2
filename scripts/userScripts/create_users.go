@@ -40,6 +40,8 @@ func generateRandomUser() models.User {
 }
 
 func CreateRandomUsers(createUsers int) {
+	src := rand.NewSource(time.Now().UnixNano())
+	rand.New(src)
 	for i := 0; i < createUsers; i++ {
 		user := generateRandomUser()
 
