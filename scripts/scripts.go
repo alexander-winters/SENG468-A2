@@ -96,9 +96,10 @@ func promptForConfirmation() bool {
 func displayHelp() {
 	fmt.Println("Usage: userScripts [options]")
 	fmt.Println("\nOptions:")
-	fmt.Println("  -c N      Create N random users")
-	fmt.Println("  -d        Delete all data (requires confirmation)")
-	fmt.Println("  -y        Skip confirmation prompt when using -d")
-	fmt.Println("  -af       Add random friends to users")
-	fmt.Println("  -h, -help Display help information")
+	fmt.Println("  -c N          Create N random users")
+	fmt.Println("  -d            Delete all data (requires confirmation)")
+	fmt.Println("  -y            Skip confirmation prompt when using -d")
+	fmt.Println("  -af           Add random friends to users")
+	fmt.Println("  -r <username> Get reports for specified username")
+	fmt.Println("  -h, -help     Display help information")
 }

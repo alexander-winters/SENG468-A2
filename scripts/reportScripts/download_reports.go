@@ -11,9 +11,9 @@ import (
 
 func DownloadReports(username string) {
 	urls := []string{
-		fmt.Sprintf("http://localhost/reports/user/%s/posts", username),
-		fmt.Sprintf("http://localhost/reports/user/%s/comments", username),
-		fmt.Sprintf("http://localhost/reports/user/%s/likes", username),
+		fmt.Sprintf("http://localhost/reports/%s/posts", username),
+		fmt.Sprintf("http://localhost/reports/%s/comments", username),
+		fmt.Sprintf("http://localhost/reports/%s/likes", username),
 	}
 
 	filenames := []string{

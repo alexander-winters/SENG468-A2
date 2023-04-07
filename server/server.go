@@ -46,9 +46,9 @@ func main() {
 	app.Put("/user/:username/post/:post_number/comment/like", routes.LikeComment)
 
 	// Set up the routes for reports
-	app.Get("/reports/user/posts", routes.PostReport)
-	app.Get("/reports/user/comments", routes.UserCommentReport)
-	app.Get("/reports/user/likes", routes.LikeReport)
+	app.Get("/reports/:username/posts", routes.PostReport)
+	app.Get("/reports/:username/comments", routes.UserCommentReport)
+	app.Get("/reports/:username/likes", routes.LikeReport)
 
 	// Start the server on the specified port
 	port := os.Getenv("PORT")
