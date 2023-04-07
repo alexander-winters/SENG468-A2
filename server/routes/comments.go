@@ -199,59 +199,65 @@ func GetComment(c *fiber.Ctx) error {
 
 // UpdateComment updates a comment in the database by ID
 func UpdateComment(c *fiber.Ctx) error {
-	// Get a handle to the comments collection
-	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
+	// Get the username and post number from the request parameters
+	username := c.Params("username")
+	postNumber, err := strconv.Atoi(c.Params("postNumber"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post number",
+		})
+	}
 
-	// Get the ID from the URL params
-	commentID := c.Params("ID")
-
-	// Convert the comment ID to a MongoDB ObjectID
-	objID, err := primitive.ObjectIDFromHex(commentID)
+	// Retrieve the post
+	post, err := GetPostByUsername(username, postNumber)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid comment ID",
 		})
 	}
 
+	// Get a handle to the comments collection
+	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
+
 	// Parse the request body into a struct
-	var comment models.Comment
-	if err := c.BodyParser(&comment); err != nil {
+	var updatedComment models.Comment
+	if err := c.BodyParser(&updatedComment); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Could not parse request body",
 		})
 	}
 
 	// Set the updated time
-	comment.UpdatedAt = time.Now()
+	updatedComment.UpdatedAt = time.Now()
 
-	// Create channels for error handling and synchronization
-	errChan := make(chan error)
-	done := make(chan bool)
-
-	ctx := context.Background()
-
-	// Concurrently update the comment in the database
-	go func() {
-		filter := bson.M{"_id": objID}
-		update := bson.M{"$set": comment}
-		_, err := commentsCollection.UpdateOne(ctx, filter, update)
-		errChan <- err
-		done <- true
-	}()
-
-	// Wait for the comment to be updated and handle any errors
-	select {
-	case err = <-errChan:
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not update comment in database",
-			})
+	// Find the comment with the given ID
+	var existingComment *models.Comment
+	for _, c := range post.Comments {
+		if c.ID == updatedComment.ID {
+			existingComment = &c
+			break
 		}
-	case <-done:
+	}
+
+	// Check if the comment was found
+	if existingComment == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Comment not found",
+		})
+	}
+
+	// Update the comment in the database
+	filter := bson.M{"_id": existingComment.ID}
+	update := bson.M{"$set": bson.M{"content": updatedComment.Content, "updated_at": updatedComment.UpdatedAt}}
+	_, err = commentsCollection.UpdateOne(c.Context(), filter, update)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not update comment in database",
+		})
 	}
 
 	// Return the updated comment
-	return c.JSON(comment)
+	return c.JSON(updatedComment)
 }
 
 // DeleteComment deletes a comment from the database by ID
@@ -359,4 +365,104 @@ func ListComments(c *fiber.Ctx) error {
 
 	// Return the comments
 	return c.JSON(comments)
+}
+
+func LikeComment(c *fiber.Ctx) error {
+	// Get the username and post number from the request parameters
+	username := c.Params("username")
+	postNumber, err := strconv.Atoi(c.Params("postNumber"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid post number",
+		})
+	}
+
+	// Get a handle to the comments collection
+	commentsCollection := mymongo.GetMongoClient().Database("seng468_a2_db").Collection("comments")
+
+	// Retrieve the existing post
+	existingComment, err := GetPostByUsername(username, postNumber)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Post not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not retrieve post",
+		})
+	}
+
+	// Check if the user has already liked the post
+	liked := false
+	for _, like := range existingComment.Likes {
+		if like.Username == c.Locals("username").(string) {
+			liked = true
+			break
+		}
+	}
+
+	// Add the like and increment the likes count if the user has not already liked the post
+	if !liked {
+		like := models.Like{
+			Username: c.Locals("username").(string),
+			LikedAt:  time.Now(),
+		}
+		existingComment.Likes = append(existingComment.Likes, like)
+		existingComment.NumberOfLikes = existingComment.NumberOfLikes + 1
+	}
+	// Create a Notification
+	notification := models.Notification{
+		UserID:     existingComment.UserID,
+		Username:   username,
+		Type:       models.PostCreatedNotification,
+		PostID:     existingComment.ID,
+		Recipient:  existingComment.Username,
+		Content:    existingComment.Content,
+		ReadStatus: false,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+
+	// Initialize Kafka producer and consumer
+	kafkaProducer := kafkaService.CreateKafkaProducer(kafkaBrokerURL)
+	kafkaConsumer := kafkaService.CreateKafkaConsumer(kafkaBrokerURL, "like")
+
+	ks := kafkaService.NewKafkaService(kafkaProducer, kafkaConsumer)
+
+	// Send a notification to the post owner
+	err = ks.SendUserNotification(notification)
+	if err != nil {
+		log.Printf("Could not send notification: %v", err)
+	}
+
+	// Update the post in the database
+	filter := bson.M{"username": username, "post_number": postNumber}
+	update := bson.M{"$set": bson.M{"likes": existingComment.Likes, "likes_count": existingComment.NumberOfLikes}}
+	_, err = commentsCollection.UpdateOne(c.Context(), filter, update)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not update post in database",
+		})
+	}
+
+	// Update the post in Redis cache
+	postKey := fmt.Sprintf("post:%s:%d", username, postNumber)
+	postJSONBytes, err := json.Marshal(existingComment)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not serialize post object",
+		})
+	}
+	postJSON := string(postJSONBytes)
+
+	err = rdb.Set(c.Context(), postKey, postJSON, 0).Err()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not store post in Redis",
+		})
+	}
+
+	// Return the updated post
+	return c.JSON(existingComment)
 }

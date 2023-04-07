@@ -22,23 +22,23 @@ func main() {
 	})
 
 	// Set up the routes for users
-	app.Post("/users", routes.CreateUser)
-	app.Get("/users/:username", routes.GetUser)
-	app.Put("/users/:username", routes.UpdateUser)
-	app.Delete("/users/:username", routes.DeleteUser)
+	app.Post("/user", routes.CreateUser)
+	app.Get("/user/:username", routes.GetUser)
+	app.Put("/user/:username", routes.UpdateUser)
+	app.Delete("/user/:username", routes.DeleteUser)
 	app.Get("/users", routes.ListUsers)
 
 	// Set up the routes for posts
-	app.Post("/users/:username/posts", routes.CreatePost)
-	app.Get("/users/:username/posts/:post_number", routes.GetPost)
-	app.Put("/users/:username/posts/:post_number", routes.UpdatePost)
-	app.Delete("/users/:username/posts/:post_number", routes.DeletePost)
+	app.Post("/user/:username/post", routes.CreatePost)
+	app.Get("/user/:username/post/:post_number", routes.GetPost)
+	app.Put("/user/:username/post/:post_number", routes.UpdatePost)
+	app.Delete("/user/:username/post/:post_number", routes.DeletePost)
 	app.Get("/users/:username/posts", routes.ListUserPosts)
 	app.Get("/posts", routes.ListAllPosts)
 
 	// Set up the routes for comments
-	app.Post("/posts/:post_number/comments", routes.CreateComment)
-	app.Get("/posts/:post_number/comments/:id", routes.GetComment)
+	app.Post("user/:username/post/:post_number/comment", routes.CreateComment)
+	app.Get("/user/:username/posts/:post_number/comment", routes.GetComment)
 	app.Put("/comments/:id", routes.UpdateComment)
 	app.Delete("/comments/:id", routes.DeleteComment)
 	app.Get("/posts/:post_number/comments", routes.ListComments)
