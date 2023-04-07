@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexander-winters/SENG468-A2/mymongo"
+	"github.com/alexander-winters/SENG468-A2/scripts/db"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -43,7 +43,7 @@ func AddRandomFriends() {
 	}
 
 	// get the MongoDB collection for the users
-	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
+	usersCollection := db.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// create a new context with a 10 second timeout and defer cancelling it
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -56,7 +56,7 @@ func AddRandomFriends() {
 	// loop through each username in the slice
 	for _, username := range usernames {
 		// generate a random number of friends between 1 and 10
-		numOfFriends := rand.Intn(10) + 1
+		numOfFriends := rand.Intn(len(usernames)-1) + 1
 		friendList := []string{}
 
 		// add friends to the list until the desired number is reached

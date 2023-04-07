@@ -79,7 +79,7 @@ func createRandomComment(username string, postNumber int) {
 		return
 	}
 
-	url := fmt.Sprintf("http://localhost:3000/user/%s/post/%d/comment", username, postNumber)
+	url := fmt.Sprintf("http://localhost:80/user/%s/post/%d/comment", username, postNumber)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(commentJSON))
 	if err != nil {
 		fmt.Println("Error creating comment:", err)

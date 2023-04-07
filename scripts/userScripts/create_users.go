@@ -40,7 +40,7 @@ func generateRandomUser() models.User {
 }
 
 func CreateRandomUsers(createUsers int) {
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < createUsers; i++ {
 		user := generateRandomUser()
 
 		userJSON, err := json.Marshal(user)
@@ -49,7 +49,7 @@ func CreateRandomUsers(createUsers int) {
 			continue
 		}
 
-		resp, err := http.Post("http://localhost:3000/user", "application/json", bytes.NewBuffer(userJSON))
+		resp, err := http.Post("http://localhost:80/user", "application/json", bytes.NewBuffer(userJSON))
 		if err != nil {
 			fmt.Println("Error creating user:", err)
 			continue

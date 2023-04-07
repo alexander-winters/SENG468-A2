@@ -7,17 +7,17 @@ import (
 	"os"
 	"time"
 
-	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
+	"github.com/alexander-winters/SENG468-A2/scripts/db"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
 func DownloadPostsToFile(filename string) {
 	// Initialize the MongoDB client
-	mymongo.GetMongoClient()
+	db.GetMongoClient()
 
 	// Get a handle to the posts collection
-	postsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("posts")
+	postsCollection := db.GetMongoClient().Database("seng468-a2-db").Collection("posts")
 
 	// Create a context
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

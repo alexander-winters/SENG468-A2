@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/alexander-winters/SENG468-A2/mymongo"
+	"github.com/alexander-winters/SENG468-A2/scripts/db"
 	"github.com/go-redis/redis/v8"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -14,14 +14,14 @@ var rdb *redis.Client
 
 func init() {
 	rdb = redis.NewClient(&redis.Options{
-		Addr:     "myredis-container:6379",
+		Addr:     "localhost:6379",
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})
 }
 
 func RemoveDBData() {
-	database := mymongo.GetMongoClient().Database("seng468-a2-db")
+	database := db.GetMongoClient().Database("seng468-a2-db")
 
 	// Get the list of collection names
 	collectionNames, err := database.ListCollectionNames(context.Background(), bson.M{})

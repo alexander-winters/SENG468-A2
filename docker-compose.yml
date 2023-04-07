@@ -3,7 +3,7 @@ version: '3.9'
 services:
   db:
     build: ./mymongo
-    container_name: mymongo-container
+    container_name: go-mongo-container
     ports:
       - "27017:27017"
     networks:
@@ -11,7 +11,7 @@ services:
 
   redis:
     build: ./redis-docker
-    container_name: myredis-container
+    container_name: go-redis-container
     ports:
       - "6379:6379"
     networks:
@@ -43,7 +43,7 @@ services:
 
   nginx:
     build: ./nginx-load-balancer
-    container_name: nginx-container
+    container_name: go-nginx-container
     ports:
       - "80:80"
     networks:
@@ -51,19 +51,19 @@ services:
 
   zookeeper:
     build: ./kafka-docker/zookeeper
-    container_name: zookeeper-container
+    container_name: go-zookeeper-container
     ports:
-      -"2181:2181"
+      - "2181:2181"
     networks:
       - my-network
   
   kafka:
-    build: ./kafka-docker/kafka
-    container_name: kafka-container
+    build: ./kafka-docker/kafkaService
+    container_name: go-kafka-container
     depends_on:
       - zookeeper
     ports:
-      -"9092:9092"
+      - "9092:9092"
     networks:
       - my-network
 

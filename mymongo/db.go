@@ -11,7 +11,7 @@ var client *mongo.Client
 
 func init() {
 	// connect to the database
-	clientOptions := options.Client().ApplyURI("mongodb://mymongo-container:27017")
+	clientOptions := options.Client().ApplyURI("mongodb://go-mongo-container:27017")
 	var err error
 	client, err = mongo.Connect(context.Background(), clientOptions)
 	if err != nil {

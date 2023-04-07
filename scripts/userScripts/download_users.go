@@ -7,17 +7,17 @@ import (
 	"os"
 	"time"
 
-	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
+	"github.com/alexander-winters/SENG468-A2/scripts/db"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
 func DownloadUsersToFile(filename string) {
 	// Initialize the MongoDB client
-	mymongo.GetMongoClient()
+	db.GetMongoClient()
 
 	// Get a handle to the users collection
-	usersCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("users")
+	usersCollection := db.GetMongoClient().Database("seng468-a2-db").Collection("users")
 
 	// Create a context
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -7,17 +7,17 @@ import (
 	"os"
 	"time"
 
-	"github.com/alexander-winters/SENG468-A2/mymongo"
 	"github.com/alexander-winters/SENG468-A2/mymongo/models"
+	"github.com/alexander-winters/SENG468-A2/scripts/db"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
 func DownloadCommentsToFile(filename string) {
 	// Initialize the MongoDB client
-	mymongo.GetMongoClient()
+	db.GetMongoClient()
 
 	// Get a handle to the comments collection
-	commentsCollection := mymongo.GetMongoClient().Database("seng468-a2-db").Collection("comments")
+	commentsCollection := db.GetMongoClient().Database("seng468-a2-db").Collection("comments")
 
 	// Create a context
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

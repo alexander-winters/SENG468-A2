@@ -68,7 +68,7 @@ func createRandomPost(username string) {
 		return
 	}
 
-	url := fmt.Sprintf("http://localhost:3000/user/%s/post", username)
+	url := fmt.Sprintf("http://localhost:80/user/%s/post", username)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(postJSON))
 	if err != nil {
 		fmt.Println("Error creating post:", err)
