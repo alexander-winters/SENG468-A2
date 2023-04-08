@@ -69,7 +69,7 @@ func main() {
 	if *createPosts > 0 {
 		// Create posts
 		fmt.Println("Creating posts...")
-		postScripts.CreatePostsForUsers(10) // Change the number to the desired number of posts per user
+		postScripts.CreatePostsForUsers(*createPosts) // Change the number to the desired number of posts per user
 		filename := "posts.txt"
 		postScripts.DownloadPostsToFile(filename)
 	}
@@ -77,7 +77,7 @@ func main() {
 	if *createComments > 0 {
 		// Create comments
 		fmt.Println("Creating comments...")
-		commentScripts.CreateCommentsForUsers(3) // Change the number to the desired number of comments per post
+		commentScripts.CreateCommentsForUsers(*createComments) // Change the number to the desired number of comments per post
 		filename := "comments.txt"
 		commentScripts.DownloadCommentsToFile(filename)
 	}
@@ -112,7 +112,7 @@ func promptForConfirmation() bool {
 }
 
 func displayHelp() {
-	fmt.Println("Usage: userScripts [options]")
+	fmt.Println("Usage: scripts [options]")
 	fmt.Println("\nOptions:")
 	fmt.Println("  -c N          Create N random users")
 	fmt.Println("  -cp N         Create N random posts per user")

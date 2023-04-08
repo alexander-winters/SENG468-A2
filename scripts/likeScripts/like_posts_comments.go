@@ -35,15 +35,15 @@ func readFromFile(filename string) ([]Content, error) {
 			return nil, errors.New("invalid line format")
 		}
 
-		postNumber, err := strconv.Atoi(parts[1])
+		postNumber, err := strconv.Atoi(strings.TrimSpace(parts[1]))
 		if err != nil {
-			return nil, err
+			postNumber = 0
 		}
 
 		content := Content{
-			Username:   parts[0],
+			Username:   strings.TrimSpace(parts[0]),
 			PostNumber: postNumber,
-			CommentID:  parts[2],
+			CommentID:  strings.TrimSpace(parts[2]),
 		}
 		contents = append(contents, content)
 	}
@@ -71,7 +71,14 @@ func readPostsAndComments(postsFilename, commentsFilename string) ([]Content, er
 }
 
 func sendLikeRequest(url string) error {
-	resp, err := http.Post(url, "application/json", nil)
+	client := &http.Client{}
+	req, err := http.NewRequest(http.MethodPut, url, strings.NewReader("{}"))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -91,32 +98,31 @@ func randomlyLike(contents []Content) {
 	likedComments := make(map[string]bool)
 
 	for _, content := range contents {
-		if content.Username != content.Username {
-			likePost := rand.Intn(2) == 0
-			likeComment := rand.Intn(2) == 0
+		likePost := rand.Intn(2) == 0
+		likeComment := rand.Intn(2) == 0
 
-			if likePost && !likedPosts[content.PostNumber] {
-				likedPosts[content.PostNumber] = true
-				postURL := fmt.Sprintf("http://localhost:80/user/%s/post/%d/like", content.Username, content.PostNumber)
-				err := sendLikeRequest(postURL)
-				if err != nil {
-					fmt.Printf("Error liking post: %v\n", err)
-				} else {
-					fmt.Printf("User '%s' likes post number %d\n", content.Username, content.PostNumber)
-				}
-			}
-
-			if likeComment && !likedComments[content.CommentID] {
-				likedComments[content.CommentID] = true
-				commentURL := fmt.Sprintf("http://localhost:80/user/%s/post/%d/comment/%s/like", content.Username, content.PostNumber, content.CommentID)
-				err := sendLikeRequest(commentURL)
-				if err != nil {
-					fmt.Printf("Error liking comment: %v\n", err)
-				} else {
-					fmt.Printf("User '%s' likes comment with ID %s\n", content.Username, content.CommentID)
-				}
+		if likePost && !likedPosts[content.PostNumber] {
+			likedPosts[content.PostNumber] = true
+			postURL := fmt.Sprintf("http://localhost:80/user/%s/post/%d/like", content.Username, content.PostNumber)
+			err := sendLikeRequest(postURL)
+			if err != nil {
+				fmt.Printf("Error liking post: %v\n", err)
+			} else {
+				fmt.Printf("User '%s' likes post number %d\n", content.Username, content.PostNumber)
 			}
 		}
+
+		if likeComment && !likedComments[content.CommentID] {
+			likedComments[content.CommentID] = true
+			commentURL := fmt.Sprintf("http://localhost:80/user/%s/post/%d/comment/%s/like", content.Username, content.PostNumber, content.CommentID)
+			err := sendLikeRequest(commentURL)
+			if err != nil {
+				fmt.Printf("Error liking comment: %v\n", err)
+			} else {
+				fmt.Printf("User '%s' likes comment with ID %s\n", content.Username, content.CommentID)
+			}
+		}
+
 	}
 }
 

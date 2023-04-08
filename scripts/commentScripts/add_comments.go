@@ -50,6 +50,7 @@ func readUserPostInfoFromFile(filename string) ([]UserPostInfo, error) {
 			username := strings.TrimSpace(parts[1])
 			postNumber, err := strconv.Atoi(strings.TrimSpace(parts[2]))
 			if err == nil {
+				fmt.Printf("Read from file: username=%s, postNumber=%d\n", username, postNumber) // Add this line
 				userPostInfos = append(userPostInfos, UserPostInfo{
 					Username:   username,
 					PostNumber: postNumber,
@@ -68,10 +69,11 @@ func createRandomComment(username string, postNumber int) {
 	src := rand.NewSource(time.Now().UnixNano())
 	rand.New(src)
 	comment := &models.Comment{
-		Username:  username,
-		Content:   randomString(10),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		Username:   username,
+		PostNumber: postNumber,
+		Content:    randomString(10),
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}
 
 	commentJSON, err := json.Marshal(comment)

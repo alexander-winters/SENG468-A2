@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 )
 
 func DownloadReports(username string) {
@@ -20,6 +21,14 @@ func DownloadReports(username string) {
 		username + "_posts.json",
 		username + "_comments.json",
 		username + "_likes.json",
+	}
+
+	// Create the reports sub-directory if it doesn't exist
+	reportsDir := "reports"
+	if _, err := os.Stat(reportsDir); os.IsNotExist(err) {
+		if err := os.Mkdir(reportsDir, 0755); err != nil {
+			log.Fatalf("Error creating reports directory: %v", err)
+		}
 	}
 
 	for i, url := range urls {
@@ -50,12 +59,15 @@ func DownloadReports(username string) {
 			continue
 		}
 
-		err = os.WriteFile(filenames[i], prettyJson, 0644)
+		// Add the sub-directory path to the filenames
+		filepathInReportsDir := filepath.Join(reportsDir, filenames[i])
+
+		err = os.WriteFile(filepathInReportsDir, prettyJson, 0644)
 		if err != nil {
-			log.Printf("Error writing JSON data to %s: %v", filenames[i], err)
+			log.Printf("Error writing JSON data to %s: %v", filepathInReportsDir, err)
 			continue
 		}
 
-		fmt.Printf("Data from %s saved to %s\n", url, filenames[i])
+		fmt.Printf("Data from %s saved to %s\n", url, filepathInReportsDir)
 	}
 }
